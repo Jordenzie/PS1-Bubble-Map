@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Bubble Atlas Widget</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="page-shell">
+      <section class="widget-window">
+        <div class="widget-layout">
+          <div class="widget-stage" id="widget-stage" aria-label="Interactive bubble canvas">
+            <div class="stage-viewport" id="stage-viewport">
+              <div class="intro-splash" aria-hidden="true">
+                <div class="startup-brand" id="startup-brand">
+                  <img src="media/ps1 logo.png" alt="PlayStation style logo" />
+                </div>
+                <p class="empty-hint" id="empty-hint" data-text="Double-click anywhere to create a new bubble...">
+                  Double-click anywhere to create a new bubble...
+                </p>
+              </div>
+              <svg class="link-layer" id="link-layer" aria-hidden="true">
+                <line class="link-preview" id="link-preview" x1="0" y1="0" x2="0" y2="0"></line>
+              </svg>
+              <div class="bubble-layer" id="bubble-layer"></div>
+            </div>
+            <div class="delete-target" id="delete-target" aria-hidden="true">
+              <span>&times;</span>
+            </div>
+          </div>
+          <aside class="widget-panel" aria-label="Navigation panel">
+            <div class="minimap-panel">
+              <div class="minimap-frame" id="minimap-frame" role="button" tabindex="0" aria-label="Mini map">
+                <svg class="minimap" id="minimap" viewBox="0 0 100 100" aria-hidden="true">
+                  <g id="minimap-links"></g>
+                  <g id="minimap-bubbles"></g>
+                  <rect id="minimap-viewport" class="minimap-viewport" x="0" y="0" width="100" height="100"></rect>
+                </svg>
+              </div>
+            </div>
+            <div class="control-section">
+              <div class="control-cluster">
+                <div class="dpad" aria-label="Pan controls">
+                  <div class="dpad-grid">
+                    <button class="dpad-button dpad-up" data-pan-direction="up" type="button" aria-label="Pan up"></button>
+                    <button class="dpad-button dpad-left" data-pan-direction="left" type="button" aria-label="Pan left"></button>
+                    <button class="dpad-button dpad-right" data-pan-direction="right" type="button" aria-label="Pan right"></button>
+                    <button class="dpad-button dpad-down" data-pan-direction="down" type="button" aria-label="Pan down"></button>
+                  </div>
+                </div>
+                <div class="zoom-controls" aria-label="Zoom controls">
+                  <button class="zoom-button zoom-in-button" id="zoom-in" type="button" aria-label="Zoom in"></button>
+                  <button class="zoom-button zoom-out-button" id="zoom-out" type="button" aria-label="Zoom out"></button>
+                </div>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>
