@@ -49,7 +49,7 @@
   --shoulder-button-width: calc(68px * var(--shoulder-scale));
   --shoulder-button-height: calc(36px * var(--shoulder-scale));
   --shoulder-stack-gap: calc(0.8rem * var(--shoulder-scale));
-  --top-row-pair-offset-x: 80px;
+  --top-row-pair-offset-x: 160px;
   --panel-centerline-offset-x: 0px;
   --panel-middle-row-gap: 1.15rem;
   --middle-row-pair-offset-x: -15px;
@@ -488,13 +488,13 @@ body {
   position: relative;
   width: 220px;
   aspect-ratio: 1;
-  border: 0px solid #dfdfdf;
-  background: var(--chrome-well);
+  border: 3px solid #d2d2d2;
+  background: #d3dce0;
   overflow: hidden;
   cursor: pointer;
   box-shadow:
-    1px 1px 0 rgba(160, 158, 151, 0.92) inset,
-    -1px -1px 0 rgba(255, 255, 255, 0.82) inset;
+    1px 1px 0 rgba(157, 155, 147, 0.96) inset,
+    -1px -1px 0 rgba(173, 171, 163, 0.92) inset;
 }
 
 .minimap-frame.is-disabled {
@@ -528,13 +528,13 @@ body {
 }
 
 .minimap-viewport {
-  fill: rgba(93, 93, 101, 0.12);
-  stroke: rgba(38, 38, 42, 0.92);
-  stroke-width: 1.25;
+  fill: rgba(37, 253, 9, 0.191);
+  stroke: rgba(13, 223, 76, 0.678);
+  stroke-width: .5;
   cursor: grab;
-  opacity: 1;
+  opacity: 0;
   transition: opacity 180ms ease;
-  pointer-events: auto;
+  pointer-events: none;
 }
 
 .minimap-viewport.is-visible {
@@ -633,7 +633,7 @@ body {
 
 .shoulder-stack {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   gap: var(--shoulder-stack-gap);
   align-items: center;
 }

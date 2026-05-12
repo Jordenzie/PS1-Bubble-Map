@@ -1496,6 +1496,15 @@ function applyZoom() {
 
 function revealZoomViewport() {
   minimapViewport.classList.add("is-visible");
+
+  if (state.zoomViewportTimerId) {
+    window.clearTimeout(state.zoomViewportTimerId);
+  }
+
+  state.zoomViewportTimerId = window.setTimeout(() => {
+    state.zoomViewportTimerId = 0;
+    hideZoomViewport();
+  }, 500);
 }
 
 function hideZoomViewport() {
@@ -1503,7 +1512,10 @@ function hideZoomViewport() {
     window.clearTimeout(state.zoomViewportTimerId);
     state.zoomViewportTimerId = 0;
   }
-  minimapViewport.classList.add("is-visible");
+  if (state.minimapDrag) {
+    return;
+  }
+  minimapViewport.classList.remove("is-visible");
 }
 
 function clientPointToWorld(clientX, clientY) {
@@ -1808,6 +1820,7 @@ function navigateFromMinimap(clientX, clientY) {
 }
 
 function beginMinimapViewportDrag(event) {
+  revealZoomViewport();
   const rect = minimapFrame.getBoundingClientRect();
   const pointerX = clamp(((event.clientX - rect.left) / rect.width) * 100, 0, 100);
   const pointerY = clamp(((event.clientY - rect.top) / rect.height) * 100, 0, 100);
@@ -1858,6 +1871,7 @@ function endMinimapViewportDrag(event) {
   minimapViewport.removeEventListener("pointerup", endMinimapViewportDrag);
   minimapViewport.removeEventListener("pointercancel", endMinimapViewportDrag);
   state.minimapDrag = null;
+  hideZoomViewport();
 }
 
 function setViewportTopLeft(worldMinX, worldMinY) {
