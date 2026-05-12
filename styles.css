@@ -19,6 +19,25 @@
   --logo-yellow: #f3c546;
   --logo-green: #3c8c77;
   --logo-blue: #4576b9;
+  --dpad-scale: 1;
+  --dpad-grid-size: calc(132px * var(--dpad-scale));
+  --dpad-button-width: calc(48px * var(--dpad-scale));
+  --dpad-vertical-height: calc(64px * var(--dpad-scale));
+  --dpad-horizontal-height: calc(61px * var(--dpad-scale));
+  --dpad-top-offset: calc(-3px * var(--dpad-scale));
+  --dpad-side-offset: calc(-3px * var(--dpad-scale));
+  --dpad-center-x: calc(42px * var(--dpad-scale));
+  --dpad-middle-y: calc(35px * var(--dpad-scale));
+  --symbol-scale: 1;
+  --symbol-grid-size: calc(132px * var(--symbol-scale));
+  --symbol-button-size: calc(50px * var(--symbol-scale));
+  --symbol-top-offset: calc(6px * var(--symbol-scale));
+  --symbol-side-offset: calc(4px * var(--symbol-scale));
+  --symbol-center-x: calc(41px * var(--symbol-scale));
+  --symbol-middle-y: calc(41px * var(--symbol-scale));
+  --analog-base-size: 88px;
+  --analog-stick-size: 58px;
+  --analog-travel-radius: 18px;
 }
 
 * {
@@ -341,33 +360,41 @@ body {
 }
 
 .widget-panel {
-  position: relative;
-  padding: 1rem 0.9rem;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  padding: 1.1rem 0.95rem;
   background: #c5c3bc;
   border-left: 1px solid var(--stage-border);
 }
 
 .minimap-panel {
   position: absolute;
-  left: 0.9rem;
-  right: 0.9rem;
-  top: 33.333%;
-  transform: translateY(-50%);
+  top: 1.25rem;
+  right: 1.25rem;
+  z-index: 3;
+  transition: opacity 180ms ease;
+}
+
+.minimap-panel.is-hidden {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .minimap-frame {
   position: relative;
-  width: 100%;
+  width: 220px;
   aspect-ratio: 1;
-  border: 1px solid rgba(111, 107, 99, 0.58);
-  background: #d1cfc8;
+  border: 1px solid rgba(111, 107, 99, 0.26);
+  background: transparent;
   overflow: hidden;
   cursor: pointer;
 }
 
 .minimap-frame.is-disabled {
   cursor: default;
-  opacity: 0.46;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .minimap-frame:focus-visible {
@@ -382,23 +409,31 @@ body {
 }
 
 .minimap-link {
-  stroke: rgba(78, 76, 72, 0.42);
+  stroke: rgba(78, 76, 72, 0.26);
   stroke-width: 1.15;
 }
 
 .minimap-bubble {
-  fill: rgba(62, 61, 58, 0.84);
+  fill: rgba(62, 61, 58, 0.48);
 }
 
 .minimap-bubble.is-root {
-  fill: rgba(96, 94, 89, 0.92);
+  fill: rgba(96, 94, 89, 0.58);
 }
 
 .minimap-viewport {
-  fill: rgba(69, 118, 185, 0.12);
-  stroke: rgba(69, 118, 185, 0.86);
+  fill: rgba(69, 118, 185, 0.1);
+  stroke: rgba(69, 118, 185, 0.82);
   stroke-width: 1.6;
   cursor: grab;
+  opacity: 0;
+  transition: opacity 180ms ease;
+  pointer-events: none;
+}
+
+.minimap-viewport.is-visible {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .minimap-viewport:active {
@@ -406,89 +441,177 @@ body {
 }
 
 .control-section {
-  position: absolute;
-  left: 0.9rem;
-  right: 0.9rem;
-  top: 66.666%;
-  transform: translateY(-50%);
-  min-height: 188px;
   display: flex;
-  align-items: center;
-  justify-content: center;
+  flex-direction: column;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 100%;
+  padding: 0.4rem 0;
 }
 
-.control-cluster {
+.control-row {
   display: grid;
   width: 100%;
-  grid-template-columns: 1fr 1fr;
   align-items: center;
-  column-gap: 0.8rem;
 }
 
-.control-cluster > .dpad,
-.control-cluster > .zoom-controls {
-  justify-self: center;
+.control-row-top,
+.control-row-bottom {
+  grid-template-columns: 1fr 1fr;
 }
 
-.zoom-controls {
+.control-row-middle {
+  grid-template-columns: 1fr 1fr;
+  column-gap: 1.1rem;
+}
+
+.control-row-top {
+  justify-items: center;
+}
+
+.control-row-bottom {
+  justify-items: center;
+}
+
+.control-row-middle {
+  justify-items: center;
+}
+
+.shoulder-buttons-section,
+.bottom-button-section {
+  width: 100%;
   display: flex;
-  flex: 0 0 auto;
-  flex-direction: column;
-  gap: 0.6rem;
   justify-content: center;
 }
 
-.zoom-button {
-  width: 50px;
-  height: 50px;
-  border: 0;
-  border-radius: 0;
+.control-row-top {
+  min-height: 150px;
+}
+
+.control-row-middle {
+  min-height: 190px;
+}
+
+.control-row-bottom {
+  min-height: 92px;
+}
+
+.button-sections {
+  display: grid;
+  width: min(620px, 100%);
+  grid-template-columns: auto auto auto auto;
+  align-items: center;
+  column-gap: 1.8rem;
+}
+
+.button-section {
+  display: flex;
+  justify-content: center;
+}
+
+.shoulder-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  align-items: center;
+}
+
+.shoulder-button {
+  width: 58px;
+  height: 36px;
   padding: 0;
-  display: block;
+  border: 0;
   background-color: transparent;
   background-position: center;
   background-repeat: no-repeat;
-  background-size: contain;
+  background-size: 100% 100%;
   cursor: pointer;
 }
 
-.zoom-button:active,
-.zoom-button.is-active {
-  filter: brightness(0.88);
-}
-
-.zoom-button:disabled,
-.dpad-button:disabled {
-  opacity: 0.42;
+.shoulder-button:disabled {
   cursor: default;
   filter: none;
 }
 
-.zoom-out-button {
-  background-image: url("media/zoom out button.png");
+.analog-stick-base {
+  position: relative;
+  width: var(--analog-base-size);
+  height: var(--analog-base-size);
+  display: grid;
+  place-items: center;
 }
 
-.zoom-in-button {
-  background-image: url("media/zoom in button.png");
+.analog-stick {
+  --stick-offset-x: 0px;
+  --stick-offset-y: 0px;
+  width: var(--analog-stick-size);
+  height: var(--analog-stick-size);
+  padding: 0;
+  border: 0;
+  background: transparent url("media/buttons/analog stick.png") center / 100% 100% no-repeat;
+  cursor: grab;
+  transform: translate(var(--stick-offset-x), var(--stick-offset-y));
+  transition: transform 150ms ease-out;
+  touch-action: none;
 }
 
-.dpad {
-  flex: 0 0 auto;
+.analog-stick.is-dragging {
+  cursor: grabbing;
+  transition: none;
+}
+
+.shoulder-l1-button {
+  background-image: url("media/buttons/L1 before.png");
+}
+
+.shoulder-l1-button:active,
+.shoulder-l1-button.is-active {
+  background-image: url("media/buttons/L1 after.png");
+}
+
+.shoulder-l2-button {
+  background-image: url("media/buttons/L2 before.png");
+}
+
+.shoulder-l2-button:active,
+.shoulder-l2-button.is-active {
+  background-image: url("media/buttons/L2 after.png");
+}
+
+.shoulder-r1-button {
+  background-image: url("media/buttons/R1 before.png");
+}
+
+.shoulder-r1-button:active,
+.shoulder-r1-button.is-active {
+  background-image: url("media/buttons/R1 after.png");
+}
+
+.shoulder-r2-button {
+  background-image: url("media/buttons/R2 before.png");
+}
+
+.shoulder-r2-button:active,
+.shoulder-r2-button.is-active {
+  background-image: url("media/buttons/R2 after.png");
+}
+
+.button-section > .diamond-grid {
+  justify-self: center;
+}
+
+.diamond-grid {
+  position: relative;
   width: 118px;
   height: 118px;
 }
 
-.dpad-grid {
-  position: relative;
-  width: 100%;
-  height: 100%;
-}
-
-.dpad-button {
+.diamond-button,
+.diamond-spacer {
   position: absolute;
 }
 
-.dpad-button {
+.diamond-button {
   width: 38px;
   height: 38px;
   padding: 0;
@@ -500,33 +623,174 @@ body {
   cursor: pointer;
 }
 
-.dpad-button:active,
-.dpad-button.is-active {
-  filter: brightness(0.88);
+.diamond-top {
+  top: 16px;
+  left: 40px;
+}
+
+.diamond-left {
+  top: 40px;
+  left: 16px;
+}
+
+.diamond-right {
+  top: 40px;
+  right: 16px;
+}
+
+.diamond-bottom {
+  bottom: 16px;
+  left: 40px;
+}
+
+.zoom-button {
+  border: 0;
+  border-radius: 0;
+  background-color: transparent;
+}
+
+.zoom-button:disabled,
+.dpad-button:disabled,
+.symbol-button:disabled {
+  cursor: default;
+  filter: none;
+}
+
+.symbol-buttons-grid {
+  width: var(--symbol-grid-size);
+  height: var(--symbol-grid-size);
+}
+
+.symbol-buttons-grid .diamond-top {
+  top: var(--symbol-top-offset);
+  left: var(--symbol-center-x);
+}
+
+.symbol-buttons-grid .diamond-left {
+  top: var(--symbol-middle-y);
+  left: var(--symbol-side-offset);
+}
+
+.symbol-buttons-grid .diamond-right {
+  top: var(--symbol-middle-y);
+  right: var(--symbol-side-offset);
+}
+
+.symbol-buttons-grid .diamond-bottom {
+  bottom: var(--symbol-top-offset);
+  left: var(--symbol-center-x);
+}
+
+.symbol-button {
+  width: var(--symbol-button-size);
+  height: var(--symbol-button-size);
+  background-size: 100% 100%;
+}
+
+.symbol-triangle-button {
+  background-image: url("media/buttons/triangle before.png");
+}
+
+.symbol-triangle-button:active,
+.symbol-triangle-button.is-active {
+  background-image: url("media/buttons/triangle after.png");
+}
+
+.symbol-square-button {
+  background-image: url("media/buttons/square before.png");
+}
+
+.symbol-square-button:active,
+.symbol-square-button.is-active {
+  background-image: url("media/buttons/square after.png");
+}
+
+.symbol-circle-button {
+  background-image: url("media/buttons/circle before.png");
+}
+
+.symbol-circle-button:active,
+.symbol-circle-button.is-active {
+  background-image: url("media/buttons/circle after.png");
+}
+
+.symbol-x-button {
+  background-image: url("media/buttons/X before.png");
+}
+
+.symbol-x-button:active,
+.symbol-x-button.is-active {
+  background-image: url("media/buttons/X after.png");
+}
+
+.dpad-button {
+  width: var(--dpad-button-width);
+  background-size: 100% 100%;
+}
+
+.dpad-grid {
+  width: var(--dpad-grid-size);
+  height: var(--dpad-grid-size);
+}
+
+.dpad-grid .diamond-top {
+  top: var(--dpad-top-offset);
+  left: var(--dpad-center-x);
+}
+
+.dpad-grid .diamond-left {
+  top: var(--dpad-middle-y);
+  left: var(--dpad-side-offset);
+}
+
+.dpad-grid .diamond-right {
+  top: var(--dpad-middle-y);
+  right: var(--dpad-side-offset);
+}
+
+.dpad-grid .diamond-bottom {
+  bottom: var(--dpad-top-offset);
+  left: var(--dpad-center-x);
 }
 
 .dpad-up {
-  top: 16px;
-  left: 40px;
-  background-image: url("media/d pad up.png");
+  height: var(--dpad-vertical-height);
+  background-image: url("media/buttons/dpad up before.png");
+}
+
+.dpad-up:active,
+.dpad-up.is-active {
+  background-image: url("media/buttons/dpad up after.png");
 }
 
 .dpad-left {
-  top: 40px;
-  left: 16px;
-  background-image: url("media/d pad left.png");
+  height: var(--dpad-horizontal-height);
+  background-image: url("media/buttons/dpad left before.png");
+}
+
+.dpad-left:active,
+.dpad-left.is-active {
+  background-image: url("media/buttons/dpad left after.png");
 }
 
 .dpad-right {
-  top: 40px;
-  right: 16px;
-  background-image: url("media/d pad right.png");
+  height: var(--dpad-horizontal-height);
+  background-image: url("media/buttons/dpad right before.png");
+}
+
+.dpad-right:active,
+.dpad-right.is-active {
+  background-image: url("media/buttons/dpad right after.png");
 }
 
 .dpad-down {
-  bottom: 16px;
-  left: 40px;
-  background-image: url("media/d pad down.png");
+  height: var(--dpad-vertical-height);
+  background-image: url("media/buttons/dpad down before.png");
+}
+
+.dpad-down:active,
+.dpad-down.is-active {
+  background-image: url("media/buttons/dpad down after.png");
 }
 
 @keyframes hint-wave {
@@ -623,12 +887,32 @@ body {
 }
 
 @media (max-width: 760px) {
+  :root {
+    --dpad-grid-size: calc(104px * var(--dpad-scale));
+    --dpad-button-width: calc(38px * var(--dpad-scale));
+    --dpad-vertical-height: calc(50px * var(--dpad-scale));
+    --dpad-horizontal-height: calc(48px * var(--dpad-scale));
+    --dpad-top-offset: calc(4px * var(--dpad-scale));
+    --dpad-side-offset: calc(0px * var(--dpad-scale));
+    --dpad-center-x: calc(33px * var(--dpad-scale));
+    --dpad-middle-y: calc(26px * var(--dpad-scale));
+    --symbol-grid-size: calc(104px * var(--symbol-scale));
+    --symbol-button-size: calc(40px * var(--symbol-scale));
+    --symbol-top-offset: calc(4px * var(--symbol-scale));
+    --symbol-side-offset: calc(2px * var(--symbol-scale));
+    --symbol-center-x: calc(32px * var(--symbol-scale));
+    --symbol-middle-y: calc(32px * var(--symbol-scale));
+    --analog-base-size: 72px;
+    --analog-stick-size: 50px;
+    --analog-travel-radius: 14px;
+  }
+
   .widget-layout {
     grid-template-columns: 1fr;
   }
 
   .widget-stage {
-    min-height: 62vh;
+    min-height: 58vh;
   }
 
   .delete-target {
@@ -637,76 +921,76 @@ body {
   }
 
   .widget-panel {
-    position: static;
     border-left: 0;
     border-top: 1px solid var(--stage-border);
-    padding: 0.9rem;
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-  }
-
-  .minimap-panel,
-  .control-section {
-    position: static;
-    left: auto;
-    right: auto;
-    top: auto;
-    transform: none;
+    padding: 0.9rem 1rem;
   }
 
   .minimap-frame {
-    max-width: 180px;
-    min-height: 180px;
+    width: 156px;
   }
 
   .control-section {
-    min-height: 156px;
+    min-height: 0;
+    gap: 0.9rem;
   }
 
-  .control-cluster {
-    gap: 0.7rem;
-    justify-content: space-between;
+  .control-row-top {
+    min-height: 108px;
+  }
+
+  .control-row-middle {
+    min-height: 156px;
+    column-gap: 0.8rem;
+  }
+
+  .control-row-bottom {
+    min-height: 60px;
+  }
+
+  .shoulder-stack {
+    gap: 0.55rem;
+  }
+
+  .shoulder-button {
+    width: 48px;
+    height: 30px;
   }
 
   .startup-brand {
     width: 96px;
     height: 96px;
-    top: calc(50% - 78px);
   }
 
-  .dpad {
+  .diamond-grid {
     width: 92px;
     height: 92px;
   }
 
-  .dpad-button {
+  .diamond-button,
+  .diamond-spacer {
     width: 30px;
     height: 30px;
   }
 
-  .dpad-up {
+  .diamond-top {
     top: 12px;
     left: 31px;
   }
 
-  .dpad-left {
+  .diamond-left {
     top: 31px;
     left: 12px;
   }
 
-  .dpad-right {
+  .diamond-right {
     top: 31px;
     right: 12px;
   }
 
-  .dpad-down {
+  .diamond-bottom {
     bottom: 12px;
     left: 31px;
   }
 
-  .zoom-button {
-    width: 40px;
-    height: 40px;
-  }
 }

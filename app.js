@@ -7,6 +7,7 @@ const previewLine = document.getElementById("link-preview");
 const startupBrand = document.getElementById("startup-brand");
 const emptyHint = document.getElementById("empty-hint");
 const deleteTarget = document.getElementById("delete-target");
+const minimapPanel = document.querySelector(".minimap-panel");
 const minimapFrame = document.getElementById("minimap-frame");
 const minimapLinks = document.getElementById("minimap-links");
 const minimapBubbles = document.getElementById("minimap-bubbles");
@@ -14,6 +15,7 @@ const minimapViewport = document.getElementById("minimap-viewport");
 const zoomOutButton = document.getElementById("zoom-out");
 const zoomInButton = document.getElementById("zoom-in");
 const panButtons = Array.from(document.querySelectorAll("[data-pan-direction]"));
+const analogSticks = Array.from(document.querySelectorAll(".analog-stick"));
 
 const state = {
   bubbles: [],
@@ -33,6 +35,8 @@ const state = {
   minimapBounds: null,
   minimapDrag: null,
   suppressMinimapClick: false,
+  zoomViewportTimerId: 0,
+  analogDrag: null,
 };
 
 const zoomStep = 0.15;
@@ -57,7 +61,11 @@ document.addEventListener("pointerdown", (event) => {
 });
 
 stage.addEventListener("dblclick", (event) => {
-  if (event.target.closest(".bubble") || event.target.closest(".control-cluster")) {
+  if (
+    event.target.closest(".bubble") ||
+    event.target.closest(".widget-panel") ||
+    event.target.closest(".minimap-panel")
+  ) {
     return;
   }
 
@@ -89,7 +97,7 @@ zoomOutButton.addEventListener("click", () => {
     return;
   }
 
-  setZoom(state.zoom - zoomStep);
+  setZoom(state.zoom - zoomStep, { revealViewport: true });
 });
 
 zoomInButton.addEventListener("click", () => {
@@ -97,7 +105,7 @@ zoomInButton.addEventListener("click", () => {
     return;
   }
 
-  setZoom(state.zoom + zoomStep);
+  setZoom(state.zoom + zoomStep, { revealViewport: true });
 });
 
 minimapFrame.addEventListener("click", (event) => {
@@ -150,6 +158,17 @@ for (const panButton of panButtons) {
   panButton.addEventListener("pointerup", stopManualPan);
   panButton.addEventListener("pointercancel", stopManualPan);
   panButton.addEventListener("pointerleave", stopManualPan);
+}
+
+for (const analogStick of analogSticks) {
+  analogStick.addEventListener("pointerdown", (event) => {
+    if (!hasStarted()) {
+      return;
+    }
+
+    event.preventDefault();
+    beginAnalogStickDrag(event, analogStick);
+  });
 }
 
 function createBubble(options = {}) {
@@ -1042,10 +1061,15 @@ function toggleEmptyHint() {
   const started = hasStarted();
   emptyHint.classList.toggle("is-hidden", started);
   startupBrand.classList.toggle("is-hidden", started);
+  minimapPanel.classList.toggle("is-hidden", !started);
   minimapFrame.classList.toggle("is-disabled", !started);
   minimapFrame.setAttribute("aria-disabled", started ? "false" : "true");
   zoomOutButton.disabled = !started;
   zoomInButton.disabled = !started;
+
+  if (!started) {
+    hideZoomViewport();
+  }
 
   for (const panButton of panButtons) {
     panButton.disabled = !started;
@@ -1056,7 +1080,11 @@ function hasStarted() {
   return state.bubbles.length > 0;
 }
 
-function setZoom(nextZoom) {
+function setZoom(nextZoom, options = {}) {
+  if (options.revealViewport) {
+    revealZoomViewport();
+  }
+
   const clampedZoom = clamp(nextZoom, minZoom, maxZoom);
 
   if (clampedZoom === state.zoom) {
@@ -1072,6 +1100,76 @@ function setZoom(nextZoom) {
   state.panX = stageCenterX - worldCenterX * state.zoom;
   state.panY = stageCenterY - worldCenterY * state.zoom;
   applyZoom();
+}
+
+function beginAnalogStickDrag(event, analogStick) {
+  const base = analogStick.parentElement;
+
+  if (!base) {
+    return;
+  }
+
+  const baseRect = base.getBoundingClientRect();
+  const centerX = baseRect.left + baseRect.width / 2;
+  const centerY = baseRect.top + baseRect.height / 2;
+  const computedStyles = window.getComputedStyle(base);
+  const radiusValue = computedStyles.getPropertyValue("--analog-travel-radius").trim();
+  const radius = Number.parseFloat(radiusValue) || 18;
+
+  state.analogDrag = {
+    pointerId: event.pointerId,
+    analogStick,
+    centerX,
+    centerY,
+    radius,
+  };
+
+  analogStick.classList.add("is-dragging");
+  analogStick.setPointerCapture(event.pointerId);
+  analogStick.addEventListener("pointermove", handleAnalogStickDrag);
+  analogStick.addEventListener("pointerup", endAnalogStickDrag);
+  analogStick.addEventListener("pointercancel", endAnalogStickDrag);
+  updateAnalogStickPosition(event.clientX, event.clientY);
+}
+
+function handleAnalogStickDrag(event) {
+  if (!state.analogDrag || event.pointerId !== state.analogDrag.pointerId) {
+    return;
+  }
+
+  updateAnalogStickPosition(event.clientX, event.clientY);
+}
+
+function endAnalogStickDrag(event) {
+  if (!state.analogDrag || event.pointerId !== state.analogDrag.pointerId) {
+    return;
+  }
+
+  const { analogStick } = state.analogDrag;
+  analogStick.releasePointerCapture(event.pointerId);
+  analogStick.removeEventListener("pointermove", handleAnalogStickDrag);
+  analogStick.removeEventListener("pointerup", endAnalogStickDrag);
+  analogStick.removeEventListener("pointercancel", endAnalogStickDrag);
+  analogStick.classList.remove("is-dragging");
+  analogStick.style.setProperty("--stick-offset-x", "0px");
+  analogStick.style.setProperty("--stick-offset-y", "0px");
+  state.analogDrag = null;
+}
+
+function updateAnalogStickPosition(clientX, clientY) {
+  const { analogStick, centerX, centerY, radius } = state.analogDrag;
+  let offsetX = clientX - centerX;
+  let offsetY = clientY - centerY;
+  const distance = Math.hypot(offsetX, offsetY);
+
+  if (distance > radius) {
+    const scale = radius / distance;
+    offsetX *= scale;
+    offsetY *= scale;
+  }
+
+  analogStick.style.setProperty("--stick-offset-x", `${offsetX}px`);
+  analogStick.style.setProperty("--stick-offset-y", `${offsetY}px`);
 }
 
 function startManualPan(direction, button) {
@@ -1126,6 +1224,28 @@ function stepManualPan(frameTime) {
 function applyZoom() {
   stageViewport.style.transform = `translate(${state.panX}px, ${state.panY}px) scale(${state.zoom})`;
   updateMinimap();
+}
+
+function revealZoomViewport() {
+  minimapViewport.classList.add("is-visible");
+
+  if (state.zoomViewportTimerId) {
+    window.clearTimeout(state.zoomViewportTimerId);
+  }
+
+  state.zoomViewportTimerId = window.setTimeout(() => {
+    state.zoomViewportTimerId = 0;
+    hideZoomViewport();
+  }, 2200);
+}
+
+function hideZoomViewport() {
+  if (state.zoomViewportTimerId) {
+    window.clearTimeout(state.zoomViewportTimerId);
+    state.zoomViewportTimerId = 0;
+  }
+
+  minimapViewport.classList.remove("is-visible");
 }
 
 function clientPointToWorld(clientX, clientY) {
@@ -1390,4 +1510,5 @@ function clamp(value, minimum, maximum) {
   return Math.min(Math.max(value, minimum), maximum);
 }
 
+toggleEmptyHint();
 applyZoom();

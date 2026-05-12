@@ -25,11 +25,6 @@
               </svg>
               <div class="bubble-layer" id="bubble-layer"></div>
             </div>
-            <div class="delete-target" id="delete-target" aria-hidden="true">
-              <span>&times;</span>
-            </div>
-          </div>
-          <aside class="widget-panel" aria-label="Navigation panel">
             <div class="minimap-panel">
               <div class="minimap-frame" id="minimap-frame" role="button" tabindex="0" aria-label="Mini map">
                 <svg class="minimap" id="minimap" viewBox="0 0 100 100" aria-hidden="true">
@@ -39,19 +34,54 @@
                 </svg>
               </div>
             </div>
+            <div class="delete-target" id="delete-target" aria-hidden="true">
+              <span>&times;</span>
+            </div>
+          </div>
+          <aside class="widget-panel" aria-label="Navigation panel">
             <div class="control-section">
-              <div class="control-cluster">
-                <div class="dpad" aria-label="Pan controls">
-                  <div class="dpad-grid">
-                    <button class="dpad-button dpad-up" data-pan-direction="up" type="button" aria-label="Pan up"></button>
-                    <button class="dpad-button dpad-left" data-pan-direction="left" type="button" aria-label="Pan left"></button>
-                    <button class="dpad-button dpad-right" data-pan-direction="right" type="button" aria-label="Pan right"></button>
-                    <button class="dpad-button dpad-down" data-pan-direction="down" type="button" aria-label="Pan down"></button>
+              <div class="control-row control-row-top">
+                <div class="button-section shoulder-buttons-section" aria-label="Left shoulder buttons section">
+                  <div class="shoulder-stack">
+                    <button class="shoulder-button shoulder-l2-button" type="button" aria-label="L2 button"></button>
+                    <button class="shoulder-button shoulder-l1-button" type="button" aria-label="L1 button"></button>
                   </div>
                 </div>
-                <div class="zoom-controls" aria-label="Zoom controls">
-                  <button class="zoom-button zoom-in-button" id="zoom-in" type="button" aria-label="Zoom in"></button>
-                  <button class="zoom-button zoom-out-button" id="zoom-out" type="button" aria-label="Zoom out"></button>
+                <div class="button-section shoulder-buttons-section" aria-label="Right shoulder buttons section">
+                  <div class="shoulder-stack">
+                    <button class="shoulder-button shoulder-r2-button" type="button" aria-label="R2 button"></button>
+                    <button class="shoulder-button shoulder-r1-button" type="button" aria-label="R1 button"></button>
+                  </div>
+                </div>
+              </div>
+              <div class="control-row control-row-middle">
+                <div class="button-section dpad-section" aria-label="D-Pad buttons section">
+                  <div class="diamond-grid dpad-grid" aria-label="Pan controls">
+                    <button class="diamond-button dpad-button dpad-up diamond-top" data-pan-direction="up" type="button" aria-label="Pan up"></button>
+                    <button class="diamond-button dpad-button dpad-left diamond-left" data-pan-direction="left" type="button" aria-label="Pan left"></button>
+                    <button class="diamond-button dpad-button dpad-right diamond-right" data-pan-direction="right" type="button" aria-label="Pan right"></button>
+                    <button class="diamond-button dpad-button dpad-down diamond-bottom" data-pan-direction="down" type="button" aria-label="Pan down"></button>
+                  </div>
+                </div>
+                <div class="button-section symbol-buttons-section" aria-label="Symbol buttons section">
+                  <div class="diamond-grid symbol-buttons-grid">
+                    <button class="diamond-button symbol-button symbol-square-button diamond-left" type="button" aria-label="Square button"></button>
+                    <button class="diamond-button symbol-button symbol-triangle-button zoom-button zoom-in-button diamond-top" id="zoom-in" type="button" aria-label="Zoom in"></button>
+                    <button class="diamond-button symbol-button symbol-circle-button diamond-right" type="button" aria-label="Circle button"></button>
+                    <button class="diamond-button symbol-button symbol-x-button zoom-button zoom-out-button diamond-bottom" id="zoom-out" type="button" aria-label="Zoom out"></button>
+                  </div>
+                </div>
+              </div>
+              <div class="control-row control-row-bottom" aria-label="Bottom buttons section">
+                <div class="button-section bottom-button-section">
+                  <div class="analog-stick-base" aria-label="Left analog stick">
+                    <button class="analog-stick analog-stick-left" type="button" aria-label="Left analog stick"></button>
+                  </div>
+                </div>
+                <div class="button-section bottom-button-section">
+                  <div class="analog-stick-base" aria-label="Right analog stick">
+                    <button class="analog-stick analog-stick-right" type="button" aria-label="Right analog stick"></button>
+                  </div>
                 </div>
               </div>
             </div>
