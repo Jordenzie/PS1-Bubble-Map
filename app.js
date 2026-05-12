@@ -94,6 +94,16 @@ document.addEventListener("keydown", (event) => {
     return;
   }
 
+  if (event.code === "Space") {
+    const selectedBubble = state.selectedBubbleId ? getBubbleById(state.selectedBubbleId) : null;
+
+    if (selectedBubble && !selectedBubble.isEditing) {
+      event.preventDefault();
+      startEditing(selectedBubble);
+    }
+    return;
+  }
+
   const isTrackedKey =
     event.code === "KeyW" ||
     event.code === "KeyA" ||
@@ -396,8 +406,6 @@ function beginBubbleInteraction(event, bubble) {
       endDrag(endEvent);
       return;
     }
-
-    queueBubbleEdit(bubble);
   };
 
   bubble.element.addEventListener("pointermove", handleMove);
@@ -526,6 +534,7 @@ function startEditing(bubble) {
     state.activeEditor.label.blur();
   }
 
+  clearPressedWidgetKeys();
   state.activeEditor = bubble;
   bubble.isEditing = true;
   bubble.element.classList.add("is-editing");
@@ -1070,15 +1079,6 @@ function findParentBubble(childBubble) {
   return getBubbleById(parentLink.parentId);
 }
 
-function queueBubbleEdit(bubble) {
-  setSelectedBubble(bubble);
-  clearBubbleClickTimer(bubble);
-  bubble.clickTimerId = window.setTimeout(() => {
-    bubble.clickTimerId = 0;
-    startEditing(bubble);
-  }, 220);
-}
-
 function clearBubbleClickTimer(bubble) {
   if (!bubble.clickTimerId) {
     return;
@@ -1194,6 +1194,10 @@ function setZoom(nextZoom, options = {}) {
 }
 
 function shouldIgnoreKeyboardShortcut(event) {
+  if (state.activeEditor) {
+    return true;
+  }
+
   const target = event.target;
 
   if (!(target instanceof HTMLElement)) {
@@ -1206,6 +1210,17 @@ function shouldIgnoreKeyboardShortcut(event) {
     target.tagName === "TEXTAREA" ||
     target.tagName === "SELECT"
   );
+}
+
+function clearPressedWidgetKeys() {
+  state.pressedKeys.clear();
+  state.keyboardPanOrder = [];
+
+  for (const bindingId of state.activeKeyBindings) {
+    deactivateKeyboardBinding(bindingId);
+  }
+
+  state.activeKeyBindings.clear();
 }
 
 function syncKeyboardBindings() {

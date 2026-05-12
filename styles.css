@@ -76,7 +76,7 @@ body {
 .widget-window {
   width: min(1120px, 100%);
   background: var(--window-bg);
-  border: 1px solid var(--window-border);
+  border: 2px solid var(--window-border);
   border-radius: 0;
   padding: 0;
   overflow: hidden;
@@ -840,7 +840,7 @@ body {
   top: 0;
   width: var(--diameter);
   height: var(--diameter);
-  border: 1px solid rgba(100, 96, 90, 0.26);
+  border: 2px solid #000;
   border-radius: 999px;
   display: grid;
   place-items: center;
@@ -851,6 +851,7 @@ body {
   user-select: none;
   touch-action: none;
   background: #b9b9b9;
+  box-shadow: 0 4px 10px rgba(76, 76, 76, 0.55);
   transition: background-color 160ms ease, border-color 160ms ease;
 }
 
