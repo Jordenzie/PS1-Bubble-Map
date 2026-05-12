@@ -335,41 +335,55 @@ body {
 
 .widget-panel {
   display: flex;
-  align-items: stretch;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 1.2rem;
   padding: 1rem 2.2rem;
   width: fit-content;
   background: #c5c3bc;
   border-left: 1px solid var(--stage-border);
 }
 
+.panel-section {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+.minimap-section {
+  align-items: flex-start;
+}
+
+.button-control-section {
+  flex: 1 1 auto;
+  align-items: center;
+}
+
 .minimap-panel {
-  position: absolute;
-  top: 1.25rem;
-  right: 1.25rem;
-  z-index: 3;
+  position: relative;
   transition: opacity 180ms ease;
 }
 
 .minimap-panel.is-hidden {
-  opacity: 0;
-  pointer-events: none;
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .minimap-frame {
   position: relative;
   width: 220px;
   aspect-ratio: 1;
-  border: 1px solid rgba(111, 107, 99, 0.26);
-  background: transparent;
+  border: 2px solid rgba(0, 0, 0, 0.26);
+  background: #c9d2d8 ;
   overflow: hidden;
   cursor: pointer;
 }
 
 .minimap-frame.is-disabled {
-  cursor: default;
-  opacity: 0;
-  pointer-events: none;
+  cursor: pointer;
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .minimap-frame:focus-visible {
@@ -401,9 +415,9 @@ body {
   stroke: rgba(69, 118, 185, 0.82);
   stroke-width: 1.6;
   cursor: grab;
-  opacity: 0;
+  opacity: 1;
   transition: opacity 180ms ease;
-  pointer-events: none;
+  pointer-events: auto;
 }
 
 .minimap-viewport.is-visible {
@@ -941,6 +955,10 @@ body {
     border-left: 0;
     border-top: 1px solid var(--stage-border);
     padding: 0.9rem 1rem;
+  }
+
+  .button-control-section {
+    width: 100%;
   }
 
   .minimap-frame {

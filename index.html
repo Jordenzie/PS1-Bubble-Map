@@ -25,18 +25,21 @@
               </svg>
               <div class="bubble-layer" id="bubble-layer"></div>
             </div>
-            <div class="minimap-panel">
-              <div class="minimap-frame" id="minimap-frame" role="button" tabindex="0" aria-label="Mini map">
-                <svg class="minimap" id="minimap" viewBox="0 0 100 100" aria-hidden="true">
-                  <g id="minimap-links"></g>
-                  <g id="minimap-bubbles"></g>
-                  <rect id="minimap-viewport" class="minimap-viewport" x="0" y="0" width="100" height="100"></rect>
-                </svg>
-              </div>
-            </div>
           </div>
           <aside class="widget-panel" aria-label="Navigation panel">
-            <div class="control-section">
+            <div class="panel-section minimap-section">
+              <div class="minimap-panel">
+                <div class="minimap-frame" id="minimap-frame" role="button" tabindex="0" aria-label="Mini map">
+                  <svg class="minimap" id="minimap" viewBox="0 0 100 100" aria-hidden="true">
+                    <g id="minimap-links"></g>
+                    <g id="minimap-bubbles"></g>
+                    <rect id="minimap-viewport" class="minimap-viewport" x="0" y="0" width="100" height="100"></rect>
+                  </svg>
+                </div>
+              </div>
+            </div>
+            <div class="panel-section button-control-section">
+              <div class="control-section">
               <div class="control-row control-row-top">
                 <div class="button-section shoulder-buttons-section" aria-label="Left shoulder buttons section">
                   <div class="shoulder-stack">
@@ -81,6 +84,7 @@
                   </div>
                 </div>
               </div>
+            </div>
             </div>
           </aside>
         </div>

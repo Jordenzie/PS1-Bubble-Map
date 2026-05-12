@@ -1152,15 +1152,8 @@ function toggleEmptyHint() {
   const started = hasStarted();
   emptyHint.classList.toggle("is-hidden", started);
   startupBrand.classList.toggle("is-hidden", started);
-  minimapPanel.classList.toggle("is-hidden", !started);
-  minimapFrame.classList.toggle("is-disabled", !started);
-  minimapFrame.setAttribute("aria-disabled", started ? "false" : "true");
   zoomOutButton.disabled = !started;
   zoomInButton.disabled = !started;
-
-  if (!started) {
-    hideZoomViewport();
-  }
 
   for (const panButton of panButtons) {
     panButton.disabled = !started;
@@ -1451,15 +1444,6 @@ function applyZoom() {
 
 function revealZoomViewport() {
   minimapViewport.classList.add("is-visible");
-
-  if (state.zoomViewportTimerId) {
-    window.clearTimeout(state.zoomViewportTimerId);
-  }
-
-  state.zoomViewportTimerId = window.setTimeout(() => {
-    state.zoomViewportTimerId = 0;
-    hideZoomViewport();
-  }, 2200);
 }
 
 function hideZoomViewport() {
@@ -1467,8 +1451,7 @@ function hideZoomViewport() {
     window.clearTimeout(state.zoomViewportTimerId);
     state.zoomViewportTimerId = 0;
   }
-
-  minimapViewport.classList.remove("is-visible");
+  minimapViewport.classList.add("is-visible");
 }
 
 function clientPointToWorld(clientX, clientY) {
