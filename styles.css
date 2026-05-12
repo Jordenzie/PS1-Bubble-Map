@@ -35,9 +35,18 @@
   --symbol-side-offset: calc(0px * var(--symbol-scale));
   --symbol-center-x: calc(41px * var(--symbol-scale));
   --symbol-middle-y: calc(41px * var(--symbol-scale));
+  --shoulder-scale: 1;
+  --shoulder-button-width: calc(68px * var(--shoulder-scale));
+  --shoulder-button-height: calc(36px * var(--shoulder-scale));
+  --shoulder-stack-gap: calc(0.8rem * var(--shoulder-scale));
+  --top-row-pair-offset-x: 80px;
+  --panel-centerline-offset-x: 0px;
+  --middle-row-pair-offset-x: -15px;
+  --bottom-row-pair-offset-x: -12px;
   --analog-base-size: 88px;
   --analog-stick-size: 72px;
   --analog-travel-radius: 15px;
+  --analog-row-offset-y: 0px;
 }
 
 * {
@@ -328,7 +337,7 @@ body {
   display: flex;
   align-items: stretch;
   justify-content: center;
-  padding: 1.1rem 0.95rem;
+  padding: 1rem 2.2rem;
   width: fit-content;
   background: #c5c3bc;
   border-left: 1px solid var(--stage-border);
@@ -410,6 +419,7 @@ body {
   display: flex;
   flex-direction: column;
   justify-content: center;
+  align-items: center;
   gap: 1.2rem;
   width: max-content;
   min-height: 100%;
@@ -418,26 +428,29 @@ body {
 
 .control-row {
   display: grid;
-  width: 100%;
+  width: max-content;
   align-items: center;
+  transform: translateX(var(--panel-centerline-offset-x));
 }
 
 .control-row-top,
 .control-row-bottom {
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: auto auto;
 }
 
 .control-row-middle {
-  grid-template-columns: 1fr 1fr;
-  column-gap: 1.1rem;
+  grid-template-columns: auto auto;
+  column-gap: var(--panel-middle-row-gap);
 }
 
 .control-row-top {
   justify-items: center;
+  column-gap: 0;
 }
 
 .control-row-bottom {
   justify-items: center;
+  column-gap: 0;
 }
 
 .control-row-middle {
@@ -479,13 +492,29 @@ body {
 .shoulder-stack {
   display: flex;
   flex-direction: column;
-  gap: 0.8rem;
+  gap: var(--shoulder-stack-gap);
   align-items: center;
 }
 
+.control-row-top .shoulder-buttons-section:first-child .shoulder-stack {
+  transform: translateX(var(--top-row-pair-offset-x));
+}
+
+.control-row-top .shoulder-buttons-section:last-child .shoulder-stack {
+  transform: translateX(calc(var(--top-row-pair-offset-x) * -1));
+}
+
+.control-row-middle .button-section:first-child > .diamond-grid {
+  transform: translateX(var(--middle-row-pair-offset-x));
+}
+
+.control-row-middle .button-section:last-child > .diamond-grid {
+  transform: translateX(calc(var(--middle-row-pair-offset-x) * -1));
+}
+
 .shoulder-button {
-  width: 58px;
-  height: 36px;
+  width: var(--shoulder-button-width);
+  height: var(--shoulder-button-height);
   padding: 0;
   border: 0;
   background-color: transparent;
@@ -506,6 +535,21 @@ body {
   height: var(--analog-base-size);
   display: grid;
   place-items: center;
+  transform: translateY(var(--analog-row-offset-y));
+}
+
+.control-row-bottom .bottom-button-section:first-child .analog-stick-base {
+  transform: translate(
+    var(--bottom-row-pair-offset-x),
+    var(--analog-row-offset-y)
+  );
+}
+
+.control-row-bottom .bottom-button-section:last-child .analog-stick-base {
+  transform: translate(
+    calc(var(--bottom-row-pair-offset-x) * -1),
+    var(--analog-row-offset-y)
+  );
 }
 
 .analog-stick {
@@ -873,6 +917,12 @@ body {
     --symbol-side-offset: calc(2px * var(--symbol-scale));
     --symbol-center-x: calc(32px * var(--symbol-scale));
     --symbol-middle-y: calc(32px * var(--symbol-scale));
+    --shoulder-button-width: calc(48px * var(--shoulder-scale));
+    --shoulder-button-height: calc(30px * var(--shoulder-scale));
+    --shoulder-stack-gap: calc(0.55rem * var(--shoulder-scale));
+    --top-row-pair-offset-x: 6px;
+    --middle-row-pair-offset-x: 6px;
+    --bottom-row-pair-offset-x: 6px;
     --analog-base-size: 72px;
     --analog-stick-size: 50px;
     --analog-travel-radius: 14px;
@@ -907,20 +957,11 @@ body {
 
   .control-row-middle {
     min-height: 156px;
-    column-gap: 0.8rem;
+    column-gap: 0;
   }
 
   .control-row-bottom {
     min-height: 60px;
-  }
-
-  .shoulder-stack {
-    gap: 0.55rem;
-  }
-
-  .shoulder-button {
-    width: 48px;
-    height: 30px;
   }
 
   .startup-brand {

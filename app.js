@@ -202,6 +202,11 @@ squareButton.addEventListener("click", () => {
   deleteBubble(selectedBubble);
 });
 
+circleButton.addEventListener("click", () => {
+  createBubble();
+  requestAnimationLoop();
+});
+
 minimapFrame.addEventListener("click", (event) => {
   if (!hasStarted()) {
     return;
@@ -1250,6 +1255,11 @@ function activateKeyboardBinding(bindingId) {
 
   if (bindingId === "triangle") {
     setZoom(state.zoom + zoomStep, { revealViewport: true });
+    return;
+  }
+
+  if (bindingId === "circle") {
+    circleButton.click();
     return;
   }
 
