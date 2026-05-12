@@ -19,25 +19,25 @@
   --logo-yellow: #f3c546;
   --logo-green: #3c8c77;
   --logo-blue: #4576b9;
-  --dpad-scale: 1;
+  --dpad-scale: .9 ;
   --dpad-grid-size: calc(132px * var(--dpad-scale));
   --dpad-button-width: calc(48px * var(--dpad-scale));
   --dpad-vertical-height: calc(64px * var(--dpad-scale));
   --dpad-horizontal-height: calc(61px * var(--dpad-scale));
   --dpad-top-offset: calc(-3px * var(--dpad-scale));
-  --dpad-side-offset: calc(-3px * var(--dpad-scale));
+  --dpad-side-offset: calc(0px * var(--dpad-scale));
   --dpad-center-x: calc(42px * var(--dpad-scale));
   --dpad-middle-y: calc(35px * var(--dpad-scale));
   --symbol-scale: 1;
   --symbol-grid-size: calc(132px * var(--symbol-scale));
   --symbol-button-size: calc(50px * var(--symbol-scale));
-  --symbol-top-offset: calc(6px * var(--symbol-scale));
-  --symbol-side-offset: calc(4px * var(--symbol-scale));
+  --symbol-top-offset: calc(-5px * var(--symbol-scale));
+  --symbol-side-offset: calc(0px * var(--symbol-scale));
   --symbol-center-x: calc(41px * var(--symbol-scale));
   --symbol-middle-y: calc(41px * var(--symbol-scale));
   --analog-base-size: 88px;
-  --analog-stick-size: 58px;
-  --analog-travel-radius: 18px;
+  --analog-stick-size: 72px;
+  --analog-travel-radius: 15px;
 }
 
 * {
@@ -75,7 +75,7 @@ body {
 
 .widget-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 248px;
+  grid-template-columns: minmax(0, 1fr) max-content;
   align-items: stretch;
 }
 
@@ -324,46 +324,12 @@ body {
   animation: none;
 }
 
-.delete-target {
-  position: absolute;
-  left: 50%;
-  bottom: 1.5rem;
-  z-index: 2;
-  width: 64px;
-  height: 64px;
-  border: 1px solid rgba(176, 48, 40, 0.62);
-  border-radius: 999px;
-  display: grid;
-  place-items: center;
-  transform: translateX(-50%) scale(0.92);
-  background: rgba(216, 77, 56, 0.9);
-  color: rgba(255, 255, 255, 0.96);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 160ms ease, transform 160ms ease, background-color 160ms ease;
-}
-
-.delete-target.is-visible {
-  opacity: 1;
-  transform: translateX(-50%) scale(1);
-}
-
-.delete-target.is-armed {
-  background: #b83028;
-  transform: translateX(-50%) scale(1.08);
-}
-
-.delete-target span {
-  font-size: 2rem;
-  line-height: 1;
-  transform: translateY(-1px);
-}
-
 .widget-panel {
   display: flex;
   align-items: stretch;
   justify-content: center;
   padding: 1.1rem 0.95rem;
+  width: fit-content;
   background: #c5c3bc;
   border-left: 1px solid var(--stage-border);
 }
@@ -443,8 +409,9 @@ body {
 .control-section {
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  width: 100%;
+  justify-content: center;
+  gap: 1.2rem;
+  width: max-content;
   min-height: 100%;
   padding: 0.4rem 0;
 }
@@ -485,15 +452,15 @@ body {
 }
 
 .control-row-top {
-  min-height: 150px;
+  min-height: 0;
 }
 
 .control-row-middle {
-  min-height: 190px;
+  min-height: 0;
 }
 
 .control-row-bottom {
-  min-height: 92px;
+  min-height: 0;
 }
 
 .button-sections {
@@ -529,7 +496,7 @@ body {
 }
 
 .shoulder-button:disabled {
-  cursor: default;
+  cursor: pointer;
   filter: none;
 }
 
@@ -549,7 +516,7 @@ body {
   padding: 0;
   border: 0;
   background: transparent url("media/buttons/analog stick.png") center / 100% 100% no-repeat;
-  cursor: grab;
+  cursor: pointer;
   transform: translate(var(--stick-offset-x), var(--stick-offset-y));
   transition: transform 150ms ease-out;
   touch-action: none;
@@ -652,7 +619,7 @@ body {
 .zoom-button:disabled,
 .dpad-button:disabled,
 .symbol-button:disabled {
-  cursor: default;
+  cursor: pointer;
   filter: none;
 }
 
@@ -853,6 +820,10 @@ body {
   border-color: rgba(216, 77, 56, 0.72);
 }
 
+.bubble.is-selected {
+  border-color: rgba(69, 118, 185, 0.86);
+}
+
 .bubble.is-editing {
   cursor: text;
   border-color: rgba(243, 197, 70, 0.82);
@@ -913,11 +884,6 @@ body {
 
   .widget-stage {
     min-height: 58vh;
-  }
-
-  .delete-target {
-    width: 58px;
-    height: 58px;
   }
 
   .widget-panel {

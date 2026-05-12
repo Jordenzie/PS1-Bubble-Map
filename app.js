@@ -6,12 +6,23 @@ const linkLayer = document.getElementById("link-layer");
 const previewLine = document.getElementById("link-preview");
 const startupBrand = document.getElementById("startup-brand");
 const emptyHint = document.getElementById("empty-hint");
-const deleteTarget = document.getElementById("delete-target");
 const minimapPanel = document.querySelector(".minimap-panel");
 const minimapFrame = document.getElementById("minimap-frame");
 const minimapLinks = document.getElementById("minimap-links");
 const minimapBubbles = document.getElementById("minimap-bubbles");
 const minimapViewport = document.getElementById("minimap-viewport");
+const dpadUpButton = document.querySelector(".dpad-up");
+const dpadLeftButton = document.querySelector(".dpad-left");
+const dpadRightButton = document.querySelector(".dpad-right");
+const dpadDownButton = document.querySelector(".dpad-down");
+const triangleButton = document.querySelector(".symbol-triangle-button");
+const circleButton = document.querySelector(".symbol-circle-button");
+const squareButton = document.querySelector(".symbol-square-button");
+const xButton = document.querySelector(".symbol-x-button");
+const l1Button = document.querySelector(".shoulder-l1-button");
+const l2Button = document.querySelector(".shoulder-l2-button");
+const r1Button = document.querySelector(".shoulder-r1-button");
+const r2Button = document.querySelector(".shoulder-r2-button");
 const zoomOutButton = document.getElementById("zoom-out");
 const zoomInButton = document.getElementById("zoom-in");
 const panButtons = Array.from(document.querySelectorAll("[data-pan-direction]"));
@@ -24,6 +35,7 @@ const state = {
   nextLinkId: 1,
   drag: null,
   activeEditor: null,
+  selectedBubbleId: null,
   rafId: 0,
   lastFrame: performance.now(),
   panIntent: null,
@@ -37,12 +49,29 @@ const state = {
   suppressMinimapClick: false,
   zoomViewportTimerId: 0,
   analogDrag: null,
+  pressedKeys: new Set(),
+  activeKeyBindings: new Set(),
+  keyboardPanOrder: [],
 };
 
 const zoomStep = 0.15;
 const minZoom = 0.7;
 const maxZoom = 1.8;
 const manualPanSpeed = 520;
+const keyBoundButtons = {
+  triangle: triangleButton,
+  circle: circleButton,
+  square: squareButton,
+  x: xButton,
+  dpadUp: dpadUpButton,
+  dpadLeft: dpadLeftButton,
+  dpadRight: dpadRightButton,
+  dpadDown: dpadDownButton,
+  l1: l1Button,
+  l2: l2Button,
+  r1: r1Button,
+  r2: r2Button,
+};
 
 window.addEventListener("resize", () => {
   for (const bubble of state.bubbles) {
@@ -58,6 +87,56 @@ document.addEventListener("pointerdown", (event) => {
   if (state.activeEditor && !state.activeEditor.element.contains(event.target)) {
     state.activeEditor.label.blur();
   }
+});
+
+document.addEventListener("keydown", (event) => {
+  if (shouldIgnoreKeyboardShortcut(event)) {
+    return;
+  }
+
+  const isTrackedKey =
+    event.code === "KeyW" ||
+    event.code === "KeyA" ||
+    event.code === "KeyS" ||
+    event.code === "KeyD" ||
+    event.code === "ArrowUp" ||
+    event.code === "ArrowLeft" ||
+    event.code === "ArrowRight" ||
+    event.code === "ArrowDown" ||
+    event.code === "KeyQ" ||
+    event.code === "KeyE" ||
+    event.code === "ShiftLeft" ||
+    event.code === "ShiftRight";
+
+  if (!isTrackedKey) {
+    return;
+  }
+
+  event.preventDefault();
+  state.pressedKeys.add(event.code);
+  syncKeyboardBindings();
+});
+
+document.addEventListener("keyup", (event) => {
+  if (
+    event.code !== "KeyW" &&
+    event.code !== "KeyA" &&
+    event.code !== "KeyS" &&
+    event.code !== "KeyD" &&
+    event.code !== "ArrowUp" &&
+    event.code !== "ArrowLeft" &&
+    event.code !== "ArrowRight" &&
+    event.code !== "ArrowDown" &&
+    event.code !== "KeyQ" &&
+    event.code !== "KeyE" &&
+    event.code !== "ShiftLeft" &&
+    event.code !== "ShiftRight"
+  ) {
+    return;
+  }
+
+  state.pressedKeys.delete(event.code);
+  syncKeyboardBindings();
 });
 
 stage.addEventListener("dblclick", (event) => {
@@ -106,6 +185,21 @@ zoomInButton.addEventListener("click", () => {
   }
 
   setZoom(state.zoom + zoomStep, { revealViewport: true });
+});
+
+squareButton.addEventListener("click", () => {
+  if (!hasStarted() || !state.selectedBubbleId) {
+    return;
+  }
+
+  const selectedBubble = getBubbleById(state.selectedBubbleId);
+
+  if (!selectedBubble) {
+    clearSelectedBubble();
+    return;
+  }
+
+  deleteBubble(selectedBubble);
 });
 
 minimapFrame.addEventListener("click", (event) => {
@@ -162,11 +256,8 @@ for (const panButton of panButtons) {
 
 for (const analogStick of analogSticks) {
   analogStick.addEventListener("pointerdown", (event) => {
-    if (!hasStarted()) {
-      return;
-    }
-
     event.preventDefault();
+    event.stopPropagation();
     beginAnalogStickDrag(event, analogStick);
   });
 }
@@ -251,6 +342,7 @@ function createBubble(options = {}) {
 }
 
 function beginBubbleInteraction(event, bubble) {
+  setSelectedBubble(bubble);
   const worldPoint = clientPointToWorld(event.clientX, event.clientY);
   const interaction = {
     bubble,
@@ -324,11 +416,10 @@ function beginDrag(interaction, event) {
     lastClientY: event.clientY,
     componentIds,
     linkLengths: captureComponentLinkLengths(componentIds),
-    deleteArmed: false,
     target: null,
   };
   clearBubbleClickTimer(bubble);
-  toggleDeleteTarget(true);
+  setSelectedBubble(bubble);
   dragBubble(event);
 }
 
@@ -340,14 +431,11 @@ function endDrag() {
   const { bubble, target } = state.drag;
   bubble.element.classList.remove("is-dragging");
 
-  if (state.drag.deleteArmed) {
-    deleteBubble(bubble);
-  } else if (target) {
+  if (target) {
     createLink(state.drag.bubble, target);
   }
 
   clearPreviewTarget();
-  toggleDeleteTarget(false);
   state.drag = null;
   requestAnimationLoop();
 }
@@ -373,17 +461,9 @@ function dragBubble(event) {
 
   drag.lastClientX = event.clientX;
   drag.lastClientY = event.clientY;
-
-  drag.deleteArmed = isBubbleOverDeleteTarget(bubble);
-  updateDeleteTargetState(drag.deleteArmed);
-
-  if (drag.deleteArmed) {
-    clearPreviewTarget();
-  } else {
-    redrawLinks();
-    const overlapTarget = findOverlapTarget(bubble);
-    updatePreviewTarget(bubble, overlapTarget);
-  }
+  redrawLinks();
+  const overlapTarget = findOverlapTarget(bubble);
+  updatePreviewTarget(bubble, overlapTarget);
 }
 
 function createLink(childBubble, parentBubble) {
@@ -986,6 +1066,7 @@ function findParentBubble(childBubble) {
 }
 
 function queueBubbleEdit(bubble) {
+  setSelectedBubble(bubble);
   clearBubbleClickTimer(bubble);
   bubble.clickTimerId = window.setTimeout(() => {
     bubble.clickTimerId = 0;
@@ -1000,29 +1081,6 @@ function clearBubbleClickTimer(bubble) {
 
   window.clearTimeout(bubble.clickTimerId);
   bubble.clickTimerId = 0;
-}
-
-function toggleDeleteTarget(isVisible) {
-  deleteTarget.classList.toggle("is-visible", isVisible);
-  if (!isVisible) {
-    deleteTarget.classList.remove("is-armed");
-  }
-}
-
-function updateDeleteTargetState(isArmed) {
-  deleteTarget.classList.toggle("is-armed", isArmed);
-}
-
-function isBubbleOverDeleteTarget(bubble) {
-  const stageRect = stage.getBoundingClientRect();
-  const deleteRect = deleteTarget.getBoundingClientRect();
-  const bubbleCenterX = stageRect.left + bubble.x;
-  const bubbleCenterY = stageRect.top + bubble.y;
-  const deleteCenterX = deleteRect.left + deleteRect.width / 2;
-  const deleteCenterY = deleteRect.top + deleteRect.height / 2;
-  const activationRadius = bubble.radius + deleteRect.width * 0.42;
-
-  return Math.hypot(bubbleCenterX - deleteCenterX, bubbleCenterY - deleteCenterY) <= activationRadius;
 }
 
 function deleteBubble(bubbleToDelete) {
@@ -1052,9 +1110,37 @@ function deleteBubble(bubbleToDelete) {
 
   state.links = remainingLinks;
   state.bubbles = state.bubbles.filter((bubble) => bubble.id !== bubbleToDelete.id);
+  if (state.selectedBubbleId === bubbleToDelete.id) {
+    state.selectedBubbleId = null;
+  }
   refreshBubbleSizes();
   toggleEmptyHint();
   redrawLinks();
+}
+
+function setSelectedBubble(bubble) {
+  if (!bubble) {
+    clearSelectedBubble();
+    return;
+  }
+
+  if (state.selectedBubbleId && state.selectedBubbleId !== bubble.id) {
+    const previousBubble = getBubbleById(state.selectedBubbleId);
+    previousBubble?.element.classList.remove("is-selected");
+  }
+
+  state.selectedBubbleId = bubble.id;
+  bubble.element.classList.add("is-selected");
+}
+
+function clearSelectedBubble() {
+  if (!state.selectedBubbleId) {
+    return;
+  }
+
+  const previousBubble = getBubbleById(state.selectedBubbleId);
+  previousBubble?.element.classList.remove("is-selected");
+  state.selectedBubbleId = null;
 }
 
 function toggleEmptyHint() {
@@ -1102,6 +1188,116 @@ function setZoom(nextZoom, options = {}) {
   applyZoom();
 }
 
+function shouldIgnoreKeyboardShortcut(event) {
+  const target = event.target;
+
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+
+  return (
+    target.isContentEditable ||
+    target.tagName === "INPUT" ||
+    target.tagName === "TEXTAREA" ||
+    target.tagName === "SELECT"
+  );
+}
+
+function syncKeyboardBindings() {
+  const nextBindings = getActiveKeyboardBindings();
+
+  for (const bindingId of state.activeKeyBindings) {
+    if (!nextBindings.has(bindingId)) {
+      deactivateKeyboardBinding(bindingId);
+    }
+  }
+
+  for (const bindingId of nextBindings) {
+    if (!state.activeKeyBindings.has(bindingId)) {
+      activateKeyboardBinding(bindingId);
+    }
+  }
+
+  state.activeKeyBindings = nextBindings;
+}
+
+function getActiveKeyboardBindings() {
+  const bindings = new Set();
+  const hasShift = state.pressedKeys.has("ShiftLeft") || state.pressedKeys.has("ShiftRight");
+
+  if (state.pressedKeys.has("KeyW")) bindings.add("triangle");
+  if (state.pressedKeys.has("KeyD")) bindings.add("circle");
+  if (state.pressedKeys.has("KeyS")) bindings.add("x");
+  if (state.pressedKeys.has("KeyA")) bindings.add("square");
+  if (state.pressedKeys.has("ArrowUp")) bindings.add("dpadUp");
+  if (state.pressedKeys.has("ArrowLeft")) bindings.add("dpadLeft");
+  if (state.pressedKeys.has("ArrowRight")) bindings.add("dpadRight");
+  if (state.pressedKeys.has("ArrowDown")) bindings.add("dpadDown");
+
+  if (state.pressedKeys.has("KeyQ")) {
+    bindings.add(hasShift ? "l2" : "l1");
+  }
+
+  if (state.pressedKeys.has("KeyE")) {
+    bindings.add(hasShift ? "r2" : "r1");
+  }
+
+  return bindings;
+}
+
+function activateKeyboardBinding(bindingId) {
+  keyBoundButtons[bindingId]?.classList.add("is-active");
+
+  if (bindingId === "triangle") {
+    setZoom(state.zoom + zoomStep, { revealViewport: true });
+    return;
+  }
+
+  if (bindingId === "x") {
+    setZoom(state.zoom - zoomStep, { revealViewport: true });
+    return;
+  }
+
+  if (bindingId === "square") {
+    squareButton.click();
+    return;
+  }
+
+  if (bindingId.startsWith("dpad")) {
+    state.keyboardPanOrder = state.keyboardPanOrder.filter((item) => item !== bindingId);
+    state.keyboardPanOrder.push(bindingId);
+    refreshKeyboardPan();
+  }
+}
+
+function deactivateKeyboardBinding(bindingId) {
+  keyBoundButtons[bindingId]?.classList.remove("is-active");
+
+  if (bindingId.startsWith("dpad")) {
+    state.keyboardPanOrder = state.keyboardPanOrder.filter((item) => item !== bindingId);
+    refreshKeyboardPan();
+  }
+}
+
+function refreshKeyboardPan() {
+  const activeBinding = state.keyboardPanOrder.at(-1);
+
+  if (!activeBinding) {
+    stopManualPan();
+    return;
+  }
+
+  if (activeBinding === "dpadUp") {
+    startManualPan("up", dpadUpButton);
+  } else if (activeBinding === "dpadLeft") {
+    startManualPan("left", dpadLeftButton);
+  } else if (activeBinding === "dpadRight") {
+    startManualPan("right", dpadRightButton);
+  } else if (activeBinding === "dpadDown") {
+    startManualPan("down", dpadDownButton);
+  }
+}
+
 function beginAnalogStickDrag(event, analogStick) {
   const base = analogStick.parentElement;
 
@@ -1126,9 +1322,9 @@ function beginAnalogStickDrag(event, analogStick) {
 
   analogStick.classList.add("is-dragging");
   analogStick.setPointerCapture(event.pointerId);
-  analogStick.addEventListener("pointermove", handleAnalogStickDrag);
-  analogStick.addEventListener("pointerup", endAnalogStickDrag);
-  analogStick.addEventListener("pointercancel", endAnalogStickDrag);
+  document.addEventListener("pointermove", handleAnalogStickDrag);
+  document.addEventListener("pointerup", endAnalogStickDrag);
+  document.addEventListener("pointercancel", endAnalogStickDrag);
   updateAnalogStickPosition(event.clientX, event.clientY);
 }
 
@@ -1146,10 +1342,12 @@ function endAnalogStickDrag(event) {
   }
 
   const { analogStick } = state.analogDrag;
-  analogStick.releasePointerCapture(event.pointerId);
-  analogStick.removeEventListener("pointermove", handleAnalogStickDrag);
-  analogStick.removeEventListener("pointerup", endAnalogStickDrag);
-  analogStick.removeEventListener("pointercancel", endAnalogStickDrag);
+  if (analogStick.hasPointerCapture(event.pointerId)) {
+    analogStick.releasePointerCapture(event.pointerId);
+  }
+  document.removeEventListener("pointermove", handleAnalogStickDrag);
+  document.removeEventListener("pointerup", endAnalogStickDrag);
+  document.removeEventListener("pointercancel", endAnalogStickDrag);
   analogStick.classList.remove("is-dragging");
   analogStick.style.setProperty("--stick-offset-x", "0px");
   analogStick.style.setProperty("--stick-offset-y", "0px");
