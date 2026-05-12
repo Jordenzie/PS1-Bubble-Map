@@ -7,15 +7,20 @@
 }
 
 :root {
-  --page-bg: #efefec;
-  --window-bg: #d9d9d7;
+  --page-bg: #ecece8;
+  --window-bg: #d8d8d4;
   --window-border: #111111;
-  --stage-border: #8d8d89;
-  --panel-border: #8f8e88;
-  --frame-shadow: #3f3f3c;
-  --frame-highlight: #f8f8f6;
-  --frame-mid: #d0cfcb;
-  --frame-low: #b2b1ab;
+  --stage-border: #8b8a84;
+  --panel-border: #8c8a84;
+  --frame-shadow: #4a4944;
+  --frame-highlight: #f8f8f4;
+  --frame-mid: #d4d3ce;
+  --frame-low: #b0aea7;
+  --chrome-fill: #d7d7d2;
+  --chrome-top: #f5f5f1;
+  --chrome-bottom: #9f9d95;
+  --chrome-well: #e6e5df;
+  --shadow-step: #73716b;
   --ink: #1e1e1d;
   --muted: rgba(46, 46, 44, 0.46);
   --link: rgba(54, 53, 50, 0.54);
@@ -46,6 +51,7 @@
   --shoulder-stack-gap: calc(0.8rem * var(--shoulder-scale));
   --top-row-pair-offset-x: 80px;
   --panel-centerline-offset-x: 0px;
+  --panel-middle-row-gap: 1.15rem;
   --middle-row-pair-offset-x: -15px;
   --bottom-row-pair-offset-x: -12px;
   --analog-base-size: 88px;
@@ -80,6 +86,7 @@ body {
 }
 
 .widget-window {
+  position: relative;
   width: min(1120px, 100%);
   background: var(--window-bg);
   border: 1px solid var(--window-border);
@@ -90,39 +97,47 @@ body {
     1px 1px 0 var(--frame-highlight) inset,
     -1px -1px 0 var(--frame-low) inset,
     2px 2px 0 var(--window-border),
-    7px 7px 0 rgba(0, 0, 0, 0.18);
+    4px 4px 0 var(--shadow-step);
+}
+
+.widget-window::before {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  border: 1px solid rgba(255, 255, 255, 0.38);
+  pointer-events: none;
 }
 
 .widget-titlebar {
-  min-height: 34px;
-  padding: 0 0.8rem;
+  min-height: 30px;
+  padding: 0 0.62rem;
   display: flex;
   align-items: center;
-  gap: 0.6rem;
-  background: #e2e2df;
-  border-bottom: 1px solid #8f8f8b;
+  gap: 0.45rem;
+  background: var(--chrome-fill);
+  border-bottom: 1px solid #777671;
   box-shadow:
-    0 1px 0 var(--frame-highlight) inset,
-    0 -1px 0 rgba(168, 167, 161, 0.9) inset;
+    0 1px 0 var(--chrome-top) inset,
+    0 -1px 0 var(--chrome-bottom) inset;
 }
 
 .widget-titlebar-box {
-  width: 18px;
-  height: 18px;
-  flex: 0 0 18px;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
   border: 1px solid #2d2d2b;
   background:
     linear-gradient(135deg, transparent 44%, #2d2d2b 44%, #2d2d2b 56%, transparent 56%),
     linear-gradient(45deg, transparent 44%, #2d2d2b 44%, #2d2d2b 56%, transparent 56%),
-    #ecebe7;
+    #e8e7e0;
   box-shadow:
-    1px 1px 0 rgba(255, 255, 255, 0.7) inset,
-    -1px -1px 0 rgba(146, 145, 139, 0.9) inset;
+    1px 1px 0 rgba(255, 255, 255, 0.78) inset,
+    -1px -1px 0 rgba(146, 145, 139, 0.92) inset;
 }
 
 .widget-title {
   margin: 0;
-  font-size: 0.98rem;
+  font-size: 0.9rem;
   font-weight: 400;
   letter-spacing: 0;
 }
@@ -138,11 +153,11 @@ body {
   min-height: min(78vh, 820px);
   overflow: hidden;
   border-radius: 0;
-  border: 1px solid #777770;
-  background: #eeeeeb;
+  border: 1px solid #000;
+  background: #ecece8;
   box-shadow:
-    1px 1px 0 rgba(255, 255, 255, 0.85) inset,
-    -1px -1px 0 rgba(176, 175, 169, 0.96) inset;
+    1px 1px 0 rgba(255, 255, 255, 0.88) inset,
+    -1px -1px 0 rgba(167, 165, 157, 0.98) inset;
 }
 
 .stage-viewport {
@@ -154,12 +169,12 @@ body {
 .widget-stage::before {
   content: "";
   position: absolute;
-  inset: 14px;
+  inset: 12px;
   border-radius: 0;
-  border: 1px solid rgba(131, 129, 122, 0.38);
+  border: 1px solid #a9a8a2;
   box-shadow:
-    1px 1px 0 rgba(255, 255, 255, 0.5) inset,
-    -1px -1px 0 rgba(177, 175, 169, 0.35) inset;
+    1px 1px 0 rgba(255, 255, 255, 0.48) inset,
+    -1px -1px 0 rgba(182, 180, 173, 0.54) inset;
   pointer-events: none;
 }
 
@@ -389,41 +404,54 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: flex-start;
-  gap: 1rem;
-  padding: 1rem 1.45rem 1.15rem;
+  gap: 0;
+  padding: 0;
   width: fit-content;
-  background: #d5d4ce;
-  border-left: 1px solid #8e8c86;
+  background: var(--chrome-fill);
+  border-left: 1px solid #000;
   box-shadow:
-    1px 0 0 rgba(255, 255, 255, 0.62) inset,
-    -1px 0 0 rgba(173, 171, 163, 0.84) inset;
+    1px 0 0 rgba(255, 255, 255, 0.72) inset,
+    -1px 0 0 rgba(167, 165, 157, 0.92) inset;
 }
 
 .panel-section {
   width: 100%;
   display: flex;
   justify-content: center;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
 }
 
 .minimap-section {
   align-items: flex-start;
+  padding: 0;
+  background: var(--chrome-fill);
+  border: 1px solid #000;
+  box-shadow:
+    1px 1px 0 var(--chrome-top) inset,
+    -1px -1px 0 var(--chrome-bottom) inset;
 }
 
 .button-control-section {
   flex: 1 1 auto;
   align-items: center;
+  padding: 0;
+  background: var(--chrome-fill);
+  border: 1px solid #000;
+  box-shadow:
+    1px 1px 0 var(--chrome-top) inset,
+    -1px -1px 0 var(--chrome-bottom) inset;
 }
 
 .minimap-panel {
   position: relative;
   transition: opacity 180ms ease;
-  padding: 0.45rem;
-  background: #d9d9d6;
-  border: 1px solid #2b2b29;
-  box-shadow:
-    1px 1px 0 rgba(255, 255, 255, 0.78) inset,
-    -1px -1px 0 rgba(156, 154, 146, 0.92) inset,
-    3px 3px 0 rgba(0, 0, 0, 0.16);
+  padding: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
 }
 
 .minimap-panel.is-hidden {
@@ -435,13 +463,13 @@ body {
   position: relative;
   width: 220px;
   aspect-ratio: 1;
-  border: 1px solid #2b2b29;
-  background: #e7e7e2;
+  border: 1px solid #000;
+  background: var(--chrome-well);
   overflow: hidden;
   cursor: pointer;
   box-shadow:
-    1px 1px 0 rgba(151, 150, 144, 0.88) inset,
-    -1px -1px 0 rgba(255, 255, 255, 0.76) inset;
+    1px 1px 0 rgba(160, 158, 151, 0.92) inset,
+    -1px -1px 0 rgba(255, 255, 255, 0.82) inset;
 }
 
 .minimap-frame.is-disabled {
@@ -498,16 +526,21 @@ body {
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  gap: 1.2rem;
-  width: max-content;
+  gap: 0.9rem;
+  width: 100%;
   min-height: 100%;
-  padding: 0.55rem 0.15rem;
+  padding: 0.1rem 2.2rem;
 }
 
 .control-row {
   display: grid;
-  width: max-content;
+  width: 100%;
   align-items: center;
+  justify-content: center;
+  padding: 0.45rem 0.55rem;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
   transform: translateX(var(--panel-centerline-offset-x));
 }
 
@@ -1009,6 +1042,7 @@ body {
     --shoulder-button-height: calc(30px * var(--shoulder-scale));
     --shoulder-stack-gap: calc(0.55rem * var(--shoulder-scale));
     --top-row-pair-offset-x: 6px;
+    --panel-middle-row-gap: 0.7rem;
     --middle-row-pair-offset-x: 6px;
     --bottom-row-pair-offset-x: 6px;
     --analog-base-size: 72px;

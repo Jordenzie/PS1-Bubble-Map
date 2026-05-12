@@ -29,6 +29,7 @@ const panButtons = Array.from(document.querySelectorAll("[data-pan-direction]"))
 const analogSticks = Array.from(document.querySelectorAll(".analog-stick"));
 
 const state = {
+  hasEnteredApp: false,
   bubbles: [],
   links: [],
   nextBubbleId: 1,
@@ -91,6 +92,12 @@ document.addEventListener("pointerdown", (event) => {
 
 document.addEventListener("keydown", (event) => {
   if (shouldIgnoreKeyboardShortcut(event)) {
+    return;
+  }
+
+  if (!hasStarted() && event.code === "Enter") {
+    event.preventDefault();
+    enterApp();
     return;
   }
 
@@ -278,6 +285,7 @@ for (const analogStick of analogSticks) {
 }
 
 function createBubble(options = {}) {
+  enterApp();
   const id = `bubble-${state.nextBubbleId++}`;
   const radius = 48;
   const spawnPoint = options.x != null && options.y != null ? options : pickSpawnPoint(radius);
@@ -1161,7 +1169,16 @@ function toggleEmptyHint() {
 }
 
 function hasStarted() {
-  return state.bubbles.length > 0;
+  return state.hasEnteredApp;
+}
+
+function enterApp() {
+  if (state.hasEnteredApp) {
+    return;
+  }
+
+  state.hasEnteredApp = true;
+  toggleEmptyHint();
 }
 
 function setZoom(nextZoom, options = {}) {
