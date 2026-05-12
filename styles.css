@@ -53,6 +53,11 @@
   --panel-centerline-offset-x: 0px;
   --panel-middle-row-gap: 1.15rem;
   --middle-row-pair-offset-x: -15px;
+  --menu-scale: 1;
+  --menu-button-width: calc(55px * var(--menu-scale));
+  --menu-button-height: calc(30px * var(--menu-scale));
+  --menu-button-font-size: calc(1rem * var(--menu-scale));
+  --menu-row-pair-offset-x: -40px;
   --bottom-row-pair-offset-x: -12px;
   --analog-base-size: 88px;
   --analog-stick-size: 72px;
@@ -178,6 +183,23 @@ body {
   pointer-events: none;
 }
 
+.selection-marquee {
+  position: absolute;
+  inset: auto;
+  display: none;
+  z-index: 6;
+  border: 1px solid rgba(28, 28, 28, 0.92);
+  background: rgba(96, 96, 102, 0.14);
+  box-shadow:
+    1px 1px 0 rgba(255, 255, 255, 0.34) inset,
+    -1px -1px 0 rgba(92, 92, 90, 0.28) inset;
+  pointer-events: none;
+}
+
+.selection-marquee.is-visible {
+  display: block;
+}
+
 .link-layer,
 .bubble-layer {
   position: absolute;
@@ -206,7 +228,7 @@ body {
   position: relative;
   overflow: hidden;
   margin: 0;
-  color: rgba(81, 81, 86, 0.76);
+  color: rgba(67, 92, 208, 0.9);
   font-size: 0.95rem;
   letter-spacing: 0.01em;
   white-space: nowrap;
@@ -448,10 +470,13 @@ body {
 .minimap-panel {
   position: relative;
   transition: opacity 180ms ease;
-  padding: 0;
-  background: transparent;
-  border: 0;
-  box-shadow: none;
+  padding-top: 5px;
+  padding-bottom: 5px;
+  background: #d6d6d6 ;
+  border: 0px;
+  box-shadow: 0px 1px 0 var(--chrome-top) inset, 
+  0px -1px 0 var(--chrome-bottom) inset;
+
 }
 
 .minimap-panel.is-hidden {
@@ -463,7 +488,7 @@ body {
   position: relative;
   width: 220px;
   aspect-ratio: 1;
-  border: 1px solid #000;
+  border: 0px solid #dfdfdf;
   background: var(--chrome-well);
   overflow: hidden;
   cursor: pointer;
@@ -545,6 +570,7 @@ body {
 }
 
 .control-row-top,
+.control-row-menu,
 .control-row-bottom {
   grid-template-columns: auto auto;
 }
@@ -555,6 +581,11 @@ body {
 }
 
 .control-row-top {
+  justify-items: center;
+  column-gap: 0;
+}
+
+.control-row-menu {
   justify-items: center;
   column-gap: 0;
 }
@@ -621,6 +652,57 @@ body {
 
 .control-row-middle .button-section:last-child > .diamond-grid {
   transform: translateX(calc(var(--middle-row-pair-offset-x) * -1));
+}
+
+.control-row-menu .menu-button-section:first-child .menu-button-stack {
+  transform: translateX(var(--menu-row-pair-offset-x));
+}
+
+.control-row-menu .menu-button-section:last-child .menu-button-stack {
+  transform: translateX(calc(var(--menu-row-pair-offset-x) * -1));
+}
+
+.menu-button-section {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+.menu-button-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.18rem;
+}
+
+.menu-button {
+  width: var(--menu-button-width);
+  height: var(--menu-button-height);
+  padding: 0;
+  border: 0;
+  background-color: transparent;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.menu-button-label {
+  font-size: calc(var(--menu-button-font-size) * 0.9);
+  line-height: 1;
+  color: var(--ink);
+  user-select: none;
+}
+
+.select-button {
+  background-image: url("media/buttons/select button.png");
+}
+
+.start-button {
+  background-image: url("media/buttons/start button.png");
 }
 
 .shoulder-button {
@@ -1044,6 +1126,10 @@ body {
     --top-row-pair-offset-x: 6px;
     --panel-middle-row-gap: 0.7rem;
     --middle-row-pair-offset-x: 6px;
+    --menu-button-width: calc(66px * var(--menu-scale));
+    --menu-button-height: calc(22px * var(--menu-scale));
+    --menu-button-font-size: calc(0.52rem * var(--menu-scale));
+    --menu-row-pair-offset-x: 4px;
     --bottom-row-pair-offset-x: 6px;
     --analog-base-size: 72px;
     --analog-stick-size: 50px;

@@ -15,6 +15,7 @@
         </header>
         <div class="widget-layout">
           <div class="widget-stage" id="widget-stage" aria-label="Interactive bubble canvas">
+            <div class="selection-marquee" id="selection-marquee" aria-hidden="true"></div>
             <div class="stage-viewport" id="stage-viewport">
               <div class="intro-splash" aria-hidden="true">
                 <div class="startup-brand" id="startup-brand">
@@ -73,6 +74,20 @@
                     <button class="diamond-button symbol-button symbol-triangle-button zoom-button zoom-in-button diamond-top" id="zoom-in" type="button" aria-label="Zoom in"></button>
                     <button class="diamond-button symbol-button symbol-circle-button diamond-right" type="button" aria-label="Circle button"></button>
                     <button class="diamond-button symbol-button symbol-x-button zoom-button zoom-out-button diamond-bottom" id="zoom-out" type="button" aria-label="Zoom out"></button>
+                  </div>
+                </div>
+              </div>
+              <div class="control-row control-row-menu" aria-label="Select and Start buttons section">
+                <div class="button-section menu-button-section">
+                  <div class="menu-button-stack">
+                    <button class="menu-button select-button" type="button" aria-label="Select button"></button>
+                    <span class="menu-button-label">SELECT</span>
+                  </div>
+                </div>
+                <div class="button-section menu-button-section">
+                  <div class="menu-button-stack">
+                    <button class="menu-button start-button" type="button" aria-label="Start button"></button>
+                    <span class="menu-button-label">START</span>
                   </div>
                 </div>
               </div>

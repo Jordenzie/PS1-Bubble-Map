@@ -1,5 +1,6 @@
 const svgNamespace = "http://www.w3.org/2000/svg";
 const stage = document.getElementById("widget-stage");
+const selectionMarquee = document.getElementById("selection-marquee");
 const stageViewport = document.getElementById("stage-viewport");
 const bubbleLayer = document.getElementById("bubble-layer");
 const linkLayer = document.getElementById("link-layer");
@@ -37,6 +38,7 @@ const state = {
   drag: null,
   activeEditor: null,
   selectedBubbleId: null,
+  selectedBubbleIds: new Set(),
   rafId: 0,
   lastFrame: performance.now(),
   panIntent: null,
@@ -49,6 +51,7 @@ const state = {
   minimapDrag: null,
   suppressMinimapClick: false,
   zoomViewportTimerId: 0,
+  marqueeSelection: null,
   analogDrag: null,
   pressedKeys: new Set(),
   activeKeyBindings: new Set(),
@@ -102,7 +105,10 @@ document.addEventListener("keydown", (event) => {
   }
 
   if (event.code === "Space") {
-    const selectedBubble = state.selectedBubbleId ? getBubbleById(state.selectedBubbleId) : null;
+    const selectedBubble =
+      state.selectedBubbleIds.size === 1 && state.selectedBubbleId
+        ? getBubbleById(state.selectedBubbleId)
+        : null;
 
     if (selectedBubble && !selectedBubble.isEditing) {
       event.preventDefault();
@@ -169,6 +175,22 @@ stage.addEventListener("dblclick", (event) => {
   requestAnimationLoop();
 });
 
+stage.addEventListener("pointerdown", (event) => {
+  if (event.button !== 0 || !hasStarted()) {
+    return;
+  }
+
+  if (
+    event.target.closest(".bubble") ||
+    event.target.closest(".widget-panel") ||
+    event.target.closest(".minimap-panel")
+  ) {
+    return;
+  }
+
+  beginMarqueeSelection(event);
+});
+
 stage.addEventListener(
   "wheel",
   (event) => {
@@ -177,6 +199,10 @@ stage.addEventListener(
     }
 
     if (event.ctrlKey) {
+      event.preventDefault();
+      const zoomDelta = -event.deltaY * 0.0025;
+      const nextZoom = state.zoom * (1 + zoomDelta);
+      setZoom(nextZoom, { revealViewport: true, clientX: event.clientX, clientY: event.clientY });
       return;
     }
 
@@ -205,18 +231,11 @@ zoomInButton.addEventListener("click", () => {
 });
 
 squareButton.addEventListener("click", () => {
-  if (!hasStarted() || !state.selectedBubbleId) {
+  if (!hasStarted() || state.selectedBubbleIds.size === 0) {
     return;
   }
 
-  const selectedBubble = getBubbleById(state.selectedBubbleId);
-
-  if (!selectedBubble) {
-    clearSelectedBubble();
-    return;
-  }
-
-  deleteBubble(selectedBubble);
+  deleteSelectedBubbles();
 });
 
 circleButton.addEventListener("click", () => {
@@ -365,7 +384,7 @@ function createBubble(options = {}) {
 }
 
 function beginBubbleInteraction(event, bubble) {
-  setSelectedBubble(bubble);
+  setSelectedBubbles([bubble]);
   const worldPoint = clientPointToWorld(event.clientX, event.clientY);
   const interaction = {
     bubble,
@@ -440,7 +459,7 @@ function beginDrag(interaction, event) {
     target: null,
   };
   clearBubbleClickTimer(bubble);
-  setSelectedBubble(bubble);
+  setSelectedBubbles([bubble]);
   dragBubble(event);
 }
 
@@ -1123,36 +1142,49 @@ function deleteBubble(bubbleToDelete) {
 
   state.links = remainingLinks;
   state.bubbles = state.bubbles.filter((bubble) => bubble.id !== bubbleToDelete.id);
+  state.selectedBubbleIds.delete(bubbleToDelete.id);
   if (state.selectedBubbleId === bubbleToDelete.id) {
-    state.selectedBubbleId = null;
+    state.selectedBubbleId = state.selectedBubbleIds.values().next().value ?? null;
   }
   refreshBubbleSizes();
   toggleEmptyHint();
   redrawLinks();
 }
 
-function setSelectedBubble(bubble) {
-  if (!bubble) {
-    clearSelectedBubble();
-    return;
-  }
+function deleteSelectedBubbles() {
+  const selectedIds = Array.from(state.selectedBubbleIds);
 
-  if (state.selectedBubbleId && state.selectedBubbleId !== bubble.id) {
-    const previousBubble = getBubbleById(state.selectedBubbleId);
-    previousBubble?.element.classList.remove("is-selected");
+  for (const bubbleId of selectedIds) {
+    const bubble = getBubbleById(bubbleId);
+    if (bubble) {
+      deleteBubble(bubble);
+    }
   }
-
-  state.selectedBubbleId = bubble.id;
-  bubble.element.classList.add("is-selected");
 }
 
-function clearSelectedBubble() {
-  if (!state.selectedBubbleId) {
+function setSelectedBubbles(bubbles) {
+  clearSelectedBubbles();
+
+  const bubbleList = bubbles.filter(Boolean);
+  for (const bubble of bubbleList) {
+    state.selectedBubbleIds.add(bubble.id);
+    bubble.element.classList.add("is-selected");
+  }
+
+  state.selectedBubbleId = bubbleList[0]?.id ?? null;
+}
+
+function clearSelectedBubbles() {
+  if (state.selectedBubbleIds.size === 0 && !state.selectedBubbleId) {
     return;
   }
 
-  const previousBubble = getBubbleById(state.selectedBubbleId);
-  previousBubble?.element.classList.remove("is-selected");
+  for (const bubbleId of state.selectedBubbleIds) {
+    const bubble = getBubbleById(bubbleId);
+    bubble?.element.classList.remove("is-selected");
+  }
+
+  state.selectedBubbleIds.clear();
   state.selectedBubbleId = null;
 }
 
@@ -1192,8 +1224,11 @@ function setZoom(nextZoom, options = {}) {
     return;
   }
 
-  const stageCenterX = stage.clientWidth * 0.5;
-  const stageCenterY = stage.clientHeight * 0.5;
+  const stageRect = stage.getBoundingClientRect();
+  const stageCenterX =
+    options.clientX != null ? options.clientX - stageRect.left : stage.clientWidth * 0.5;
+  const stageCenterY =
+    options.clientY != null ? options.clientY - stageRect.top : stage.clientHeight * 0.5;
   const worldCenterX = (stageCenterX - state.panX) / state.zoom;
   const worldCenterY = (stageCenterY - state.panY) / state.zoom;
 
@@ -1476,6 +1511,129 @@ function clientPointToWorld(clientX, clientY) {
   return {
     x: (clientX - stageRect.left - state.panX) / state.zoom,
     y: (clientY - stageRect.top - state.panY) / state.zoom,
+  };
+}
+
+function beginMarqueeSelection(event) {
+  const stageRect = stage.getBoundingClientRect();
+  const marquee = {
+    pointerId: event.pointerId,
+    startLocalX: event.clientX - stageRect.left,
+    startLocalY: event.clientY - stageRect.top,
+    localX: event.clientX - stageRect.left,
+    localY: event.clientY - stageRect.top,
+    moved: false,
+  };
+
+  state.marqueeSelection = marquee;
+  stage.setPointerCapture(event.pointerId);
+  stage.addEventListener("pointermove", handleMarqueeSelectionMove);
+  stage.addEventListener("pointerup", endMarqueeSelection);
+  stage.addEventListener("pointercancel", endMarqueeSelection);
+}
+
+function handleMarqueeSelectionMove(event) {
+  if (!state.marqueeSelection || event.pointerId !== state.marqueeSelection.pointerId) {
+    return;
+  }
+
+  const stageRect = stage.getBoundingClientRect();
+  const localX = clamp(event.clientX - stageRect.left, 0, stageRect.width);
+  const localY = clamp(event.clientY - stageRect.top, 0, stageRect.height);
+  const marquee = state.marqueeSelection;
+  marquee.localX = localX;
+  marquee.localY = localY;
+
+  if (!marquee.moved) {
+    const movedDistance = Math.hypot(localX - marquee.startLocalX, localY - marquee.startLocalY);
+    if (movedDistance > 6) {
+      marquee.moved = true;
+    }
+  }
+
+  if (!marquee.moved) {
+    return;
+  }
+
+  renderMarqueeSelection();
+  updateMarqueeSelectionBubbles();
+}
+
+function endMarqueeSelection(event) {
+  if (!state.marqueeSelection || event.pointerId !== state.marqueeSelection.pointerId) {
+    return;
+  }
+
+  stage.releasePointerCapture(event.pointerId);
+  stage.removeEventListener("pointermove", handleMarqueeSelectionMove);
+  stage.removeEventListener("pointerup", endMarqueeSelection);
+  stage.removeEventListener("pointercancel", endMarqueeSelection);
+
+  if (!state.marqueeSelection.moved) {
+    clearSelectedBubbles();
+  }
+
+  hideMarqueeSelection();
+  state.marqueeSelection = null;
+}
+
+function renderMarqueeSelection() {
+  if (!state.marqueeSelection) {
+    return;
+  }
+
+  const marquee = state.marqueeSelection;
+  const left = Math.min(marquee.startLocalX, marquee.localX);
+  const top = Math.min(marquee.startLocalY, marquee.localY);
+  const width = Math.abs(marquee.localX - marquee.startLocalX);
+  const height = Math.abs(marquee.localY - marquee.startLocalY);
+
+  selectionMarquee.style.left = `${left}px`;
+  selectionMarquee.style.top = `${top}px`;
+  selectionMarquee.style.width = `${width}px`;
+  selectionMarquee.style.height = `${height}px`;
+  selectionMarquee.classList.add("is-visible");
+}
+
+function hideMarqueeSelection() {
+  selectionMarquee.classList.remove("is-visible");
+  selectionMarquee.style.width = "0px";
+  selectionMarquee.style.height = "0px";
+}
+
+function updateMarqueeSelectionBubbles() {
+  if (!state.marqueeSelection) {
+    return;
+  }
+
+  const marquee = state.marqueeSelection;
+  const firstWorld = clientPointToWorldFromStageLocal(marquee.startLocalX, marquee.startLocalY);
+  const secondWorld = clientPointToWorldFromStageLocal(marquee.localX, marquee.localY);
+  const minX = Math.min(firstWorld.x, secondWorld.x);
+  const minY = Math.min(firstWorld.y, secondWorld.y);
+  const maxX = Math.max(firstWorld.x, secondWorld.x);
+  const maxY = Math.max(firstWorld.y, secondWorld.y);
+  const selectedBubbles = state.bubbles.filter((bubble) => {
+    const bubbleMinX = bubble.x - bubble.radius;
+    const bubbleMaxX = bubble.x + bubble.radius;
+    const bubbleMinY = bubble.y - bubble.radius;
+    const bubbleMaxY = bubble.y + bubble.radius;
+
+    return (
+      bubbleMinX >= minX &&
+      bubbleMaxX <= maxX &&
+      bubbleMinY >= minY &&
+      bubbleMaxY <= maxY
+    );
+  });
+
+  setSelectedBubbles(selectedBubbles);
+}
+
+function clientPointToWorldFromStageLocal(localX, localY) {
+  return {
+    x: (localX - state.panX) / state.zoom,
+    y: (localY - state.panY) / state.zoom,
   };
 }
 
