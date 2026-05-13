@@ -56,6 +56,7 @@ const state = {
   pressedKeys: new Set(),
   activeKeyBindings: new Set(),
   keyboardPanOrder: [],
+  keyboardShuffleTimerId: 0,
 };
 
 const zoomStep = 0.15;
@@ -72,11 +73,19 @@ const bubbleDragReturnSpringMultiplier = 1.32;
 const bubbleDragReturnDampingMultiplier = 1.18;
 const bubbleDragStillnessMs = 24;
 const bubbleDragMaxOffset = 15;
+const keyboardShuffleRepeatMs = 72;
 const bubbleLinkRepelGap = 12;
 const bubbleLinkRepelSpring = 150;
 const bubbleLinkRepelDamping = 19;
 const bubbleLinkRepelMinImpulse = 220;
 const bubbleLinkRepelMaxImpulse = 680;
+const bubbleChildGravity = 1280;
+const bubbleChildHorizontalSpring = 18;
+const bubbleChildVerticalSpring = 14;
+const bubbleChildGravityDamping = 9.5;
+const bubbleChildRestGap = 24;
+const bubbleResistanceGap = 12;
+const bubbleResistanceIterations = 3;
 const keyBoundButtons = {
   triangle: triangleButton,
   circle: circleButton,
@@ -129,16 +138,38 @@ document.addEventListener("keydown", (event) => {
     return;
   }
 
-  if (event.code === "Space") {
-    const selectedBubble =
-      state.selectedBubbleIds.size === 1 && state.selectedBubbleId
-        ? getBubbleById(state.selectedBubbleId)
-        : null;
+  if (
+    hasStarted() &&
+    state.selectedBubbleIds.size > 0 &&
+    event.code === "Space" &&
+    !event.repeat
+  ) {
+    event.preventDefault();
+    toggleSelectedBubblesStatic();
+    return;
+  }
 
-    if (selectedBubble && !selectedBubble.isEditing) {
-      event.preventDefault();
-      startEditing(selectedBubble);
-    }
+  if (hasStarted() && event.code === "KeyD" && event.shiftKey && !event.repeat) {
+    event.preventDefault();
+    selectAllVisibleBubbles();
+    return;
+  }
+
+  if (hasStarted() && event.code === "KeyA" && event.shiftKey && !event.repeat) {
+    event.preventDefault();
+    deleteVisibleBubbles();
+    return;
+  }
+
+  if (
+    hasStarted() &&
+    state.selectedBubbleIds.size > 1 &&
+    event.code === "KeyS" &&
+    event.shiftKey &&
+    !event.repeat
+  ) {
+    event.preventDefault();
+    toggleSelectedBubbleBonds();
     return;
   }
 
@@ -162,6 +193,17 @@ document.addEventListener("keydown", (event) => {
 
   event.preventDefault();
   state.pressedKeys.add(event.code);
+
+  if (
+    event.code === "ArrowUp" ||
+    event.code === "ArrowLeft" ||
+    event.code === "ArrowRight" ||
+    event.code === "ArrowDown"
+  ) {
+    state.keyboardPanOrder = state.keyboardPanOrder.filter((code) => code !== event.code);
+    state.keyboardPanOrder.push(event.code);
+  }
+
   syncKeyboardBindings();
 });
 
@@ -184,6 +226,16 @@ document.addEventListener("keyup", (event) => {
   }
 
   state.pressedKeys.delete(event.code);
+
+  if (
+    event.code === "ArrowUp" ||
+    event.code === "ArrowLeft" ||
+    event.code === "ArrowRight" ||
+    event.code === "ArrowDown"
+  ) {
+    state.keyboardPanOrder = state.keyboardPanOrder.filter((code) => code !== event.code);
+  }
+
   syncKeyboardBindings();
 });
 
@@ -361,10 +413,13 @@ function createBubble(options = {}) {
     dragJelloY: 0,
     dragJelloVX: 0,
     dragJelloVY: 0,
+    gravityVX: 0,
+    gravityVY: 0,
     linkSettleTargetX: null,
     linkSettleTargetY: null,
     linkSettleVX: 0,
     linkSettleVY: 0,
+    isStatic: false,
     isEditing: false,
   };
 
@@ -424,11 +479,22 @@ function createBubble(options = {}) {
 }
 
 function beginBubbleInteraction(event, bubble) {
-  setSelectedBubbles([bubble]);
+  const wasSelected = state.selectedBubbleIds.has(bubble.id);
+
+  if (event.shiftKey) {
+    if (!wasSelected) {
+      setSelectedBubbles([...getBubblesByIds(state.selectedBubbleIds), bubble]);
+    }
+  } else {
+    setSelectedBubbles([bubble]);
+  }
+
   const worldPoint = clientPointToWorld(event.clientX, event.clientY);
   const interaction = {
     bubble,
     pointerId: event.pointerId,
+    shiftKey: event.shiftKey,
+    wasSelected,
     startClientX: event.clientX,
     startClientY: event.clientY,
     offsetX: worldPoint.x - bubble.x,
@@ -473,6 +539,18 @@ function beginBubbleInteraction(event, bubble) {
       endDrag(endEvent);
       return;
     }
+
+    if (interaction.shiftKey) {
+      if (interaction.wasSelected) {
+        const nextSelectedBubbles = getBubblesByIds(state.selectedBubbleIds).filter(
+          (selectedBubble) => selectedBubble.id !== bubble.id
+        );
+        setSelectedBubbles(nextSelectedBubbles);
+      } else {
+        setSelectedBubbles([...getBubblesByIds(state.selectedBubbleIds), bubble]);
+      }
+      return;
+    }
   };
 
   bubble.element.addEventListener("pointermove", handleMove);
@@ -484,9 +562,9 @@ function beginDrag(interaction, event) {
   const bubble = interaction.bubble;
   clearBubbleResonance(bubble);
   clearBubbleLinkSettle(bubble);
+  clearBubbleGravityMotion(bubble);
   clearBubbleDragMotion(bubble);
   bubble.element.classList.add("is-dragging");
-  const componentIds = getConnectedBubbleIds(bubble.id);
 
   state.drag = {
     bubble,
@@ -500,7 +578,6 @@ function beginDrag(interaction, event) {
     lastMoveTime: event.timeStamp,
     motionVX: 0,
     motionVY: 0,
-    componentIds,
     target: null,
   };
   clearBubbleClickTimer(bubble);
@@ -528,6 +605,7 @@ function endDrag() {
 
   clearPreviewTarget();
   state.drag = null;
+  requestAnimationLoop();
 }
 
 function dragBubble(event) {
@@ -673,6 +751,11 @@ function clearBubbleDragMotion(bubble) {
   bubble.dragJelloVX = 0;
   bubble.dragJelloVY = 0;
   resetBubbleDragJelloVars(bubble);
+}
+
+function clearBubbleGravityMotion(bubble) {
+  bubble.gravityVX = 0;
+  bubble.gravityVY = 0;
 }
 
 function clearBubbleLinkSettle(bubble, snapToTarget = false) {
@@ -908,6 +991,114 @@ function updateBubbleLinkSettlePhysics(deltaSeconds) {
   return keepAnimating;
 }
 
+function updateBubbleGravityPhysics(deltaSeconds) {
+  let keepAnimating = false;
+
+  for (const bubble of state.bubbles) {
+    if (
+      state.drag?.bubble === bubble ||
+      bubble.isStatic ||
+      bubble.linkSettleTargetX != null ||
+      bubble.linkSettleTargetY != null
+    ) {
+      continue;
+    }
+
+    const parentBubble = findParentBubble(bubble);
+    if (!parentBubble || parentBubble.children.size < 2) {
+      clearBubbleGravityMotion(bubble);
+      continue;
+    }
+
+    const restY = parentBubble.y + parentBubble.radius + bubble.radius + bubbleChildRestGap;
+    const accelerationX =
+      (parentBubble.x - bubble.x) * bubbleChildHorizontalSpring -
+      bubble.gravityVX * bubbleChildGravityDamping;
+    const accelerationY =
+      bubbleChildGravity +
+      (restY - bubble.y) * bubbleChildVerticalSpring -
+      bubble.gravityVY * bubbleChildGravityDamping;
+
+    bubble.gravityVX += accelerationX * deltaSeconds;
+    bubble.gravityVY += accelerationY * deltaSeconds;
+    bubble.x += bubble.gravityVX * deltaSeconds;
+    bubble.y += bubble.gravityVY * deltaSeconds;
+    keepBubbleInBounds(bubble);
+    renderBubble(bubble);
+
+    const offsetX = Math.abs(parentBubble.x - bubble.x);
+    const offsetY = Math.abs(restY - bubble.y);
+    const speed = Math.hypot(bubble.gravityVX, bubble.gravityVY);
+
+    if (offsetX < 0.35 && offsetY < 0.5 && speed < 8) {
+      bubble.gravityVX = 0;
+      bubble.gravityVY = 0;
+      continue;
+    }
+
+    keepAnimating = true;
+  }
+
+  return keepAnimating;
+}
+
+function updateBubbleSeparationPhysics() {
+  let keepAnimating = false;
+  const draggedBubble = state.drag?.bubble ?? null;
+
+  for (let iteration = 0; iteration < bubbleResistanceIterations; iteration += 1) {
+    let movedThisIteration = false;
+
+    for (let firstIndex = 0; firstIndex < state.bubbles.length; firstIndex += 1) {
+      const firstBubble = state.bubbles[firstIndex];
+      if (firstBubble === draggedBubble) {
+        continue;
+      }
+
+      for (let secondIndex = firstIndex + 1; secondIndex < state.bubbles.length; secondIndex += 1) {
+        const secondBubble = state.bubbles[secondIndex];
+        if (secondBubble === draggedBubble) {
+          continue;
+        }
+
+        const deltaX = secondBubble.x - firstBubble.x;
+        const deltaY = secondBubble.y - firstBubble.y;
+        const distance = Math.hypot(deltaX, deltaY);
+        const minimumDistance = firstBubble.radius + secondBubble.radius + bubbleResistanceGap;
+
+        if (distance >= minimumDistance - 0.01) {
+          continue;
+        }
+
+        const overlap = minimumDistance - distance;
+        const normalX = distance > 0.001 ? deltaX / distance : 1;
+        const normalY = distance > 0.001 ? deltaY / distance : 0;
+        const correction = overlap * 0.5;
+
+        firstBubble.x -= normalX * correction;
+        firstBubble.y -= normalY * correction;
+        secondBubble.x += normalX * correction;
+        secondBubble.y += normalY * correction;
+        keepBubbleInBounds(firstBubble);
+        keepBubbleInBounds(secondBubble);
+        renderBubble(firstBubble);
+        renderBubble(secondBubble);
+        movedThisIteration = true;
+
+        if (overlap > 0.35) {
+          keepAnimating = true;
+        }
+      }
+    }
+
+    if (!movedThisIteration) {
+      break;
+    }
+  }
+
+  return keepAnimating;
+}
+
 function keepBubbleInBounds(bubble) {
   const bounds = getBubbleBounds(bubble);
   bubble.x = clamp(bubble.x, bounds.minX, bounds.maxX);
@@ -952,10 +1143,9 @@ function pickSpawnPoint(radius) {
 function findOverlapTarget(sourceBubble) {
   let chosenTarget = null;
   let strongestOverlap = 0;
-  const excludedIds = state.drag?.componentIds ?? new Set([sourceBubble.id]);
 
   for (const candidate of state.bubbles) {
-    if (excludedIds.has(candidate.id)) {
+    if (candidate.id === sourceBubble.id || bubblesAreLinked(sourceBubble.id, candidate.id)) {
       continue;
     }
 
@@ -1045,7 +1235,10 @@ function stepScene(frameTime) {
   state.lastSceneTime = frameTime;
   const keepDragAnimating = updateBubbleDragPhysics(deltaSeconds, frameTime);
   const keepLinkAnimating = updateBubbleLinkSettlePhysics(deltaSeconds);
-  const keepAnimating = keepDragAnimating || keepLinkAnimating;
+  const keepGravityAnimating = updateBubbleGravityPhysics(deltaSeconds);
+  const keepSeparationAnimating = updateBubbleSeparationPhysics();
+  const keepAnimating =
+    keepDragAnimating || keepLinkAnimating || keepGravityAnimating || keepSeparationAnimating;
   redrawLinks();
 
   if (keepAnimating) {
@@ -1154,6 +1347,172 @@ function deleteSelectedBubbles() {
   }
 }
 
+function deleteVisibleBubbles() {
+  const visibleBubbles = getVisibleBubbles();
+
+  for (const bubble of visibleBubbles) {
+    deleteBubble(bubble);
+  }
+}
+
+function toggleSelectedBubbleBonds() {
+  const selectedBubbles = getBubblesByIds(state.selectedBubbleIds);
+
+  if (selectedBubbles.length < 2) {
+    return;
+  }
+
+  const selectedIds = new Set(selectedBubbles.map((bubble) => bubble.id));
+  let allSelectedPairsLinked = true;
+
+  for (let firstIndex = 0; firstIndex < selectedBubbles.length; firstIndex += 1) {
+    for (let secondIndex = firstIndex + 1; secondIndex < selectedBubbles.length; secondIndex += 1) {
+      if (!bubblesAreLinked(selectedBubbles[firstIndex].id, selectedBubbles[secondIndex].id)) {
+        allSelectedPairsLinked = false;
+        break;
+      }
+    }
+
+    if (!allSelectedPairsLinked) {
+      break;
+    }
+  }
+
+  if (allSelectedPairsLinked) {
+    const remainingLinks = [];
+    let removedAnyLinks = false;
+
+    for (const link of state.links) {
+      if (selectedIds.has(link.a) && selectedIds.has(link.b)) {
+        link.element.remove();
+        removedAnyLinks = true;
+        continue;
+      }
+
+      remainingLinks.push(link);
+    }
+
+    if (!removedAnyLinks) {
+      return;
+    }
+
+    state.links = remainingLinks;
+    rebuildBubbleRelationships();
+    refreshBubbleSizes();
+    redrawLinks();
+    requestAnimationLoop();
+    return;
+  }
+
+  for (let firstIndex = 0; firstIndex < selectedBubbles.length; firstIndex += 1) {
+    for (let secondIndex = firstIndex + 1; secondIndex < selectedBubbles.length; secondIndex += 1) {
+      createLink(selectedBubbles[firstIndex], selectedBubbles[secondIndex]);
+    }
+  }
+}
+
+function unlinkSelectedBubbles() {
+  if (state.selectedBubbleIds.size === 0) {
+    return;
+  }
+
+  const selectedIds = new Set(state.selectedBubbleIds);
+  const remainingLinks = [];
+  let removedAnyLinks = false;
+
+  for (const link of state.links) {
+    if (selectedIds.has(link.a) || selectedIds.has(link.b)) {
+      link.element.remove();
+      removedAnyLinks = true;
+      continue;
+    }
+
+    remainingLinks.push(link);
+  }
+
+  if (!removedAnyLinks) {
+    return;
+  }
+
+  state.links = remainingLinks;
+  rebuildBubbleRelationships();
+  refreshBubbleSizes();
+  redrawLinks();
+  requestAnimationLoop();
+}
+
+function toggleSelectedBubblesStatic() {
+  const selectedBubbles = getBubblesByIds(state.selectedBubbleIds);
+  if (selectedBubbles.length === 0) {
+    return;
+  }
+
+  const shouldBecomeStatic = selectedBubbles.some((bubble) => !bubble.isStatic);
+
+  for (const bubble of selectedBubbles) {
+    bubble.isStatic = shouldBecomeStatic;
+    bubble.element.classList.toggle("is-static", bubble.isStatic);
+    clearBubbleGravityMotion(bubble);
+  }
+
+  requestAnimationLoop();
+}
+
+function cycleVisibleBubbleSelection() {
+  const visibleBubbles = getVisibleBubbles();
+
+  if (visibleBubbles.length === 0) {
+    return;
+  }
+
+  const selectedIndex = visibleBubbles.findIndex((bubble) => bubble.id === state.selectedBubbleId);
+  const nextIndex = selectedIndex >= 0 ? (selectedIndex + 1) % visibleBubbles.length : 0;
+  setSelectedBubbles([visibleBubbles[nextIndex]]);
+}
+
+function selectAllVisibleBubbles() {
+  const visibleBubbles = getVisibleBubbles();
+
+  if (visibleBubbles.length === 0) {
+    return;
+  }
+
+  const allVisibleAlreadySelected = visibleBubbles.every((bubble) =>
+    state.selectedBubbleIds.has(bubble.id)
+  );
+
+  if (allVisibleAlreadySelected) {
+    clearSelectedBubbles();
+    return;
+  }
+
+  setSelectedBubbles(visibleBubbles);
+}
+
+function getVisibleBubbles() {
+  const visibleWorld = getVisibleWorldRect();
+  return state.bubbles
+    .filter((bubble) => {
+      return (
+        bubble.x + bubble.radius >= visibleWorld.minX &&
+        bubble.x - bubble.radius <= visibleWorld.minX + visibleWorld.width &&
+        bubble.y + bubble.radius >= visibleWorld.minY &&
+        bubble.y - bubble.radius <= visibleWorld.minY + visibleWorld.height
+      );
+    })
+    .sort((firstBubble, secondBubble) => {
+      if (firstBubble.y !== secondBubble.y) {
+        return firstBubble.y - secondBubble.y;
+      }
+
+      if (firstBubble.x !== secondBubble.x) {
+        return firstBubble.x - secondBubble.x;
+      }
+
+      return firstBubble.id.localeCompare(secondBubble.id);
+    });
+}
+
 function setSelectedBubbles(bubbles) {
   clearSelectedBubbles();
 
@@ -1164,6 +1523,29 @@ function setSelectedBubbles(bubbles) {
   }
 
   state.selectedBubbleId = bubbleList[0]?.id ?? null;
+}
+
+function rebuildBubbleRelationships() {
+  for (const bubble of state.bubbles) {
+    bubble.connections.clear();
+    bubble.children.clear();
+  }
+
+  for (const link of state.links) {
+    const firstBubble = getBubbleById(link.a);
+    const secondBubble = getBubbleById(link.b);
+    const parentBubble = getBubbleById(link.parentId);
+    const childBubble = getBubbleById(link.childId);
+
+    if (firstBubble && secondBubble) {
+      firstBubble.connections.add(secondBubble.id);
+      secondBubble.connections.add(firstBubble.id);
+    }
+
+    if (parentBubble && childBubble) {
+      parentBubble.children.add(childBubble.id);
+    }
+  }
 }
 
 function clearSelectedBubbles() {
@@ -1284,8 +1666,8 @@ function getActiveKeyboardBindings() {
 
   if (state.pressedKeys.has("KeyW")) bindings.add("triangle");
   if (state.pressedKeys.has("KeyD")) bindings.add("circle");
-  if (state.pressedKeys.has("KeyS")) bindings.add("x");
   if (state.pressedKeys.has("KeyA")) bindings.add("square");
+  if (state.pressedKeys.has("KeyS")) bindings.add("x");
   if (state.pressedKeys.has("ArrowUp")) bindings.add("dpadUp");
   if (state.pressedKeys.has("ArrowLeft")) bindings.add("dpadLeft");
   if (state.pressedKeys.has("ArrowRight")) bindings.add("dpadRight");
@@ -1306,58 +1688,139 @@ function activateKeyboardBinding(bindingId) {
   keyBoundButtons[bindingId]?.classList.add("is-active");
 
   if (bindingId === "triangle") {
-    setZoom(state.zoom + zoomStep, { revealViewport: true });
+    const selectedBubble =
+      state.selectedBubbleIds.size === 1 && state.selectedBubbleId
+        ? getBubbleById(state.selectedBubbleId)
+        : null;
+
+    if (selectedBubble && !selectedBubble.isEditing) {
+      startEditing(selectedBubble);
+    }
     return;
   }
 
   if (bindingId === "circle") {
-    circleButton.click();
+    startKeyboardShuffleSelection();
     return;
   }
 
   if (bindingId === "x") {
-    setZoom(state.zoom - zoomStep, { revealViewport: true });
+    circleButton.click();
     return;
   }
 
   if (bindingId === "square") {
-    squareButton.click();
+    deleteSelectedBubbles();
     return;
   }
 
-  if (bindingId.startsWith("dpad")) {
-    state.keyboardPanOrder = state.keyboardPanOrder.filter((item) => item !== bindingId);
-    state.keyboardPanOrder.push(bindingId);
+  if (bindingId === "dpadUp") {
     refreshKeyboardPan();
+    return;
+  }
+
+  if (bindingId === "dpadLeft") {
+    refreshKeyboardPan();
+    return;
+  }
+
+  if (bindingId === "dpadRight") {
+    refreshKeyboardPan();
+    return;
+  }
+
+  if (bindingId === "dpadDown") {
+    refreshKeyboardPan();
+    return;
+  }
+
+  if (bindingId === "l1") {
+    setZoom(state.zoom - zoomStep, { revealViewport: true });
+    return;
+  }
+
+  if (bindingId === "l2") {
+    setZoom(minZoom, { revealViewport: true });
+    return;
+  }
+
+  if (bindingId === "r1") {
+    setZoom(state.zoom + zoomStep, { revealViewport: true });
+    return;
+  }
+
+  if (bindingId === "r2") {
+    setZoom(maxZoom, { revealViewport: true });
   }
 }
 
 function deactivateKeyboardBinding(bindingId) {
   keyBoundButtons[bindingId]?.classList.remove("is-active");
 
-  if (bindingId.startsWith("dpad")) {
-    state.keyboardPanOrder = state.keyboardPanOrder.filter((item) => item !== bindingId);
+  if (bindingId === "circle") {
+    stopKeyboardShuffleSelection();
+  }
+
+  if (
+    bindingId === "dpadUp" ||
+    bindingId === "dpadLeft" ||
+    bindingId === "dpadRight" ||
+    bindingId === "dpadDown"
+  ) {
     refreshKeyboardPan();
   }
 }
 
 function refreshKeyboardPan() {
-  const activeBinding = state.keyboardPanOrder.at(-1);
+  const activeArrowCode = state.keyboardPanOrder.at(-1);
 
-  if (!activeBinding) {
-    stopManualPan();
+  if (activeArrowCode === "ArrowUp") {
+    startManualPan("up", dpadUpButton);
     return;
   }
 
-  if (activeBinding === "dpadUp") {
-    startManualPan("up", dpadUpButton);
-  } else if (activeBinding === "dpadLeft") {
+  if (activeArrowCode === "ArrowLeft") {
     startManualPan("left", dpadLeftButton);
-  } else if (activeBinding === "dpadRight") {
-    startManualPan("right", dpadRightButton);
-  } else if (activeBinding === "dpadDown") {
-    startManualPan("down", dpadDownButton);
+    return;
   }
+
+  if (activeArrowCode === "ArrowRight") {
+    startManualPan("right", dpadRightButton);
+    return;
+  }
+
+  if (activeArrowCode === "ArrowDown") {
+    startManualPan("down", dpadDownButton);
+    return;
+  }
+
+  stopManualPan();
+}
+
+function startKeyboardShuffleSelection() {
+  cycleVisibleBubbleSelection();
+
+  if (state.keyboardShuffleTimerId) {
+    window.clearInterval(state.keyboardShuffleTimerId);
+  }
+
+  state.keyboardShuffleTimerId = window.setInterval(() => {
+    if (!state.pressedKeys.has("KeyD")) {
+      stopKeyboardShuffleSelection();
+      return;
+    }
+
+    cycleVisibleBubbleSelection();
+  }, keyboardShuffleRepeatMs);
+}
+
+function stopKeyboardShuffleSelection() {
+  if (!state.keyboardShuffleTimerId) {
+    return;
+  }
+
+  window.clearInterval(state.keyboardShuffleTimerId);
+  state.keyboardShuffleTimerId = 0;
 }
 
 function beginAnalogStickDrag(event, analogStick) {
@@ -1644,31 +2107,6 @@ function clientPointToWorldFromStageLocal(localX, localY) {
     x: (localX - state.panX) / state.zoom,
     y: (localY - state.panY) / state.zoom,
   };
-}
-
-function getConnectedBubbleIds(startBubbleId) {
-  const visitedBubbleIds = new Set([startBubbleId]);
-  const bubbleQueue = [startBubbleId];
-
-  while (bubbleQueue.length > 0) {
-    const currentBubbleId = bubbleQueue.shift();
-    const currentBubble = getBubbleById(currentBubbleId);
-
-    if (!currentBubble) {
-      continue;
-    }
-
-    for (const neighborBubbleId of currentBubble.connections) {
-      if (visitedBubbleIds.has(neighborBubbleId)) {
-        continue;
-      }
-
-      visitedBubbleIds.add(neighborBubbleId);
-      bubbleQueue.push(neighborBubbleId);
-    }
-  }
-
-  return visitedBubbleIds;
 }
 
 function updateMinimap() {

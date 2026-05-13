@@ -1122,6 +1122,16 @@ body {
     3px 3px 0 rgba(56, 56, 53, 0.36);
 }
 
+.bubble.is-static {
+  background: #e6e4dc;
+  border-color: #4e5a52;
+  box-shadow:
+    1px 1px 0 rgba(255, 255, 255, 0.68) inset,
+    -1px -1px 0 rgba(165, 171, 164, 0.92) inset,
+    0 0 0 1px rgba(87, 97, 89, 0.55),
+    3px 3px 0 rgba(56, 56, 53, 0.32);
+}
+
 .bubble.is-editing {
   cursor: text;
   border-color: #000;
