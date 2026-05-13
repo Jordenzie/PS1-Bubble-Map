@@ -1026,8 +1026,49 @@ body {
   stroke-dasharray: 6 8;
 }
 
+@keyframes bubble-resonance {
+  0% {
+    transform: translate(calc(-50% - (var(--resonance-x) * 0.28)), calc(-50% - (var(--resonance-y) * 0.28)))
+      rotate(calc(var(--resonance-tilt) * -0.32)) scale(0.986);
+  }
+
+  20% {
+    transform: translate(calc(-50% + var(--resonance-x)), calc(-50% + var(--resonance-y)))
+      rotate(var(--resonance-tilt)) scale(1.055);
+  }
+
+  42% {
+    transform: translate(calc(-50% - (var(--resonance-x) * 0.42)), calc(-50% - (var(--resonance-y) * 0.42)))
+      rotate(calc(var(--resonance-tilt) * -0.56)) scale(0.972);
+  }
+
+  64% {
+    transform: translate(calc(-50% + (var(--resonance-x) * 0.2)), calc(-50% + (var(--resonance-y) * 0.2)))
+      rotate(calc(var(--resonance-tilt) * 0.24)) scale(1.016);
+  }
+
+  82% {
+    transform: translate(calc(-50% - (var(--resonance-x) * 0.08)), calc(-50% - (var(--resonance-y) * 0.08)))
+      rotate(calc(var(--resonance-tilt) * -0.1)) scale(0.995);
+  }
+
+  100% {
+    transform: translate(-50%, -50%) rotate(0deg) scale(1);
+  }
+}
+
 .bubble {
   --diameter: 112px;
+  --resonance-x: 0px;
+  --resonance-y: 0px;
+  --resonance-tilt: 0deg;
+  --drag-jello-x: 0px;
+  --drag-jello-y: 0px;
+  --drag-jello-rotate: 0deg;
+  --drag-jello-scale-x: 1;
+  --drag-jello-scale-y: 1;
+  --drag-jello-skew-x: 0deg;
+  --drag-jello-skew-y: 0deg;
   position: absolute;
   left: 0;
   top: 0;
@@ -1038,7 +1079,12 @@ body {
   display: grid;
   place-items: center;
   padding: 0;
-  transform: translate(-50%, -50%);
+  transform: translate(calc(-50% + var(--drag-jello-x)), calc(-50% + var(--drag-jello-y)))
+    rotate(var(--drag-jello-rotate))
+    skewX(var(--drag-jello-skew-x))
+    skewY(var(--drag-jello-skew-y))
+    scaleX(var(--drag-jello-scale-x))
+    scaleY(var(--drag-jello-scale-y));
   transform-origin: center;
   cursor: grab;
   user-select: none;
@@ -1051,10 +1097,16 @@ body {
   transition: background-color 160ms ease, border-color 160ms ease;
 }
 
+.bubble.is-resonating {
+  animation: bubble-resonance 460ms cubic-bezier(0.2, 0.78, 0.24, 1);
+  will-change: transform;
+}
+
 .bubble.is-dragging {
   cursor: grabbing;
   background: #ebe9e1;
   border-color: #595955;
+  will-change: transform;
 }
 
 .bubble.is-target {

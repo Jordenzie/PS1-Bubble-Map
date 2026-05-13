@@ -40,7 +40,7 @@ const state = {
   selectedBubbleId: null,
   selectedBubbleIds: new Set(),
   rafId: 0,
-  lastFrame: performance.now(),
+  lastSceneTime: 0,
   panIntent: null,
   panRafId: 0,
   panLastFrame: 0,
@@ -50,7 +50,7 @@ const state = {
   minimapBounds: null,
   minimapDrag: null,
   suppressMinimapClick: false,
-  zoomViewportTimerId: 0,
+  viewportPreviewTimerId: 0,
   marqueeSelection: null,
   analogDrag: null,
   pressedKeys: new Set(),
@@ -62,6 +62,16 @@ const zoomStep = 0.15;
 const minZoom = 0.7;
 const maxZoom = 1.8;
 const manualPanSpeed = 520;
+const bubbleResonanceMaxOffset = 12;
+const bubbleFastDragSpeedThreshold = 0.055;
+const bubbleFastDragSpeedMax = 1.7;
+const bubbleDragVelocityDecay = 17;
+const bubbleDragSpring = 255;
+const bubbleDragDamping = 23;
+const bubbleDragReturnSpringMultiplier = 1.32;
+const bubbleDragReturnDampingMultiplier = 1.18;
+const bubbleDragStillnessMs = 24;
+const bubbleDragMaxOffset = 15;
 const keyBoundButtons = {
   triangle: triangleButton,
   circle: circleButton,
@@ -101,6 +111,16 @@ document.addEventListener("keydown", (event) => {
   if (!hasStarted() && event.code === "Enter") {
     event.preventDefault();
     enterApp();
+    return;
+  }
+
+  if (
+    hasStarted() &&
+    state.selectedBubbleIds.size > 0 &&
+    (event.code === "Delete" || event.code === "Backspace")
+  ) {
+    event.preventDefault();
+    deleteSelectedBubbles();
     return;
   }
 
@@ -209,7 +229,7 @@ stage.addEventListener(
     event.preventDefault();
     state.panX -= event.deltaX;
     state.panY -= event.deltaY;
-    applyZoom();
+    applyZoom({ revealViewport: true });
   },
   { passive: false }
 );
@@ -327,13 +347,15 @@ function createBubble(options = {}) {
     radius,
     x,
     y,
-    vx: randomBetween(-1.8, 1.8),
-    vy: randomBetween(-1.4, 1.4),
     element,
     label,
     connections: new Set(),
     children: new Set(),
     clickTimerId: 0,
+    dragJelloX: 0,
+    dragJelloY: 0,
+    dragJelloVX: 0,
+    dragJelloVY: 0,
     isEditing: false,
   };
 
@@ -357,11 +379,20 @@ function createBubble(options = {}) {
     stopEditing(bubble);
   });
 
+  element.addEventListener("animationend", (event) => {
+    if (event.animationName === "bubble-resonance") {
+      element.classList.remove("is-resonating");
+    }
+  });
+
   element.addEventListener("dblclick", (event) => {
     event.preventDefault();
     event.stopPropagation();
     clearBubbleClickTimer(bubble);
-    createLinkedChildBubble(bubble);
+    setSelectedBubbles([bubble]);
+    if (!bubble.isEditing) {
+      startEditing(bubble);
+    }
   });
 
   element.addEventListener("pointerdown", (event) => {
@@ -442,6 +473,8 @@ function beginBubbleInteraction(event, bubble) {
 
 function beginDrag(interaction, event) {
   const bubble = interaction.bubble;
+  clearBubbleResonance(bubble);
+  clearBubbleDragMotion(bubble);
   bubble.element.classList.add("is-dragging");
   const componentIds = getConnectedBubbleIds(bubble.id);
 
@@ -454,12 +487,15 @@ function beginDrag(interaction, event) {
     targetY: bubble.y,
     lastClientX: event.clientX,
     lastClientY: event.clientY,
+    lastMoveTime: event.timeStamp,
+    motionVX: 0,
+    motionVY: 0,
     componentIds,
-    linkLengths: captureComponentLinkLengths(componentIds),
     target: null,
   };
   clearBubbleClickTimer(bubble);
   setSelectedBubbles([bubble]);
+  requestAnimationLoop();
   dragBubble(event);
 }
 
@@ -469,6 +505,7 @@ function endDrag() {
   }
 
   const { bubble, target } = state.drag;
+  clearBubbleDragMotion(bubble);
   bubble.element.classList.remove("is-dragging");
 
   if (target) {
@@ -477,7 +514,6 @@ function endDrag() {
 
   clearPreviewTarget();
   state.drag = null;
-  requestAnimationLoop();
 }
 
 function dragBubble(event) {
@@ -491,19 +527,21 @@ function dragBubble(event) {
   keepBubbleInBounds(bubble);
   drag.targetX = bubble.x;
   drag.targetY = bubble.y;
-  renderBubble(bubble);
-
-  const velocityX = (event.clientX - drag.lastClientX) * 0.18;
-  const velocityY = (event.clientY - drag.lastClientY) * 0.18;
-
-  bubble.vx = velocityX;
-  bubble.vy = velocityY;
-
+  const clientDeltaX = event.clientX - drag.lastClientX;
+  const clientDeltaY = event.clientY - drag.lastClientY;
+  const deltaMs = Math.max(event.timeStamp - drag.lastMoveTime, 8);
+  const nextMotionVX = clientDeltaX / deltaMs;
+  const nextMotionVY = clientDeltaY / deltaMs;
+  drag.motionVX = drag.motionVX * 0.18 + nextMotionVX * 0.82;
+  drag.motionVY = drag.motionVY * 0.18 + nextMotionVY * 0.82;
   drag.lastClientX = event.clientX;
   drag.lastClientY = event.clientY;
+  drag.lastMoveTime = event.timeStamp;
+  renderBubble(bubble);
   redrawLinks();
   const overlapTarget = findOverlapTarget(bubble);
   updatePreviewTarget(bubble, overlapTarget);
+  requestAnimationLoop();
 }
 
 function createLink(childBubble, parentBubble) {
@@ -529,31 +567,9 @@ function createLink(childBubble, parentBubble) {
   parentBubble.connections.add(childBubble.id);
   parentBubble.children.add(childBubble.id);
   refreshBubbleSizes();
-
-  separateLinkedBubbles(childBubble, parentBubble);
-  untangleLinks(18);
+  triggerLinkResonance(childBubble, parentBubble);
 
   redrawLinks();
-  requestAnimationLoop();
-}
-
-function separateLinkedBubbles(childBubble, parentBubble) {
-  const dx = childBubble.x - parentBubble.x;
-  const dy = childBubble.y - parentBubble.y;
-  const distance = Math.hypot(dx, dy) || 1;
-  const normalX = dx / distance;
-  const normalY = dy / distance;
-  const targetDistance = childBubble.radius + parentBubble.radius + 28;
-
-  childBubble.x = parentBubble.x + normalX * targetDistance;
-  childBubble.y = parentBubble.y + normalY * targetDistance;
-  childBubble.vx += normalX * 1.25;
-  childBubble.vy += normalY * 1.25;
-
-  keepBubbleInBounds(childBubble);
-  keepBubbleInBounds(parentBubble);
-  renderBubble(childBubble);
-  renderBubble(parentBubble);
 }
 
 function startEditing(bubble) {
@@ -631,6 +647,150 @@ function renderBubble(bubble) {
   bubble.element.style.setProperty("--diameter", `${diameter}px`);
   bubble.element.style.left = `${bubble.x}px`;
   bubble.element.style.top = `${bubble.y}px`;
+}
+
+function clearBubbleResonance(bubble) {
+  bubble.element.classList.remove("is-resonating");
+}
+
+function clearBubbleDragMotion(bubble) {
+  bubble.dragJelloX = 0;
+  bubble.dragJelloY = 0;
+  bubble.dragJelloVX = 0;
+  bubble.dragJelloVY = 0;
+  resetBubbleDragJelloVars(bubble);
+}
+
+function resetBubbleDragJelloVars(bubble) {
+  bubble.element.style.setProperty("--drag-jello-x", "0px");
+  bubble.element.style.setProperty("--drag-jello-y", "0px");
+  bubble.element.style.setProperty("--drag-jello-rotate", "0deg");
+  bubble.element.style.setProperty("--drag-jello-scale-x", "1");
+  bubble.element.style.setProperty("--drag-jello-scale-y", "1");
+  bubble.element.style.setProperty("--drag-jello-skew-x", "0deg");
+  bubble.element.style.setProperty("--drag-jello-skew-y", "0deg");
+}
+
+function updateBubbleDragPhysics(deltaSeconds, frameTime) {
+  if (!state.drag) {
+    return false;
+  }
+
+  const drag = state.drag;
+  const bubble = drag.bubble;
+  const ageMs = frameTime - drag.lastMoveTime;
+  const hasSettledInput = ageMs > bubbleDragStillnessMs;
+  const decayRate = hasSettledInput ? bubbleDragVelocityDecay * 2.6 : bubbleDragVelocityDecay;
+  const inputDecay = Math.exp(-decayRate * deltaSeconds);
+
+  drag.motionVX *= inputDecay;
+  drag.motionVY *= inputDecay;
+
+  const speed = Math.hypot(drag.motionVX, drag.motionVY);
+  const intensity = clamp(
+    (speed - bubbleFastDragSpeedThreshold) / (bubbleFastDragSpeedMax - bubbleFastDragSpeedThreshold),
+    0,
+    1
+  );
+  const responseIntensity = Math.pow(intensity, 0.78);
+  const targetMagnitude = clamp(responseIntensity * bubbleDragMaxOffset, 0, bubbleDragMaxOffset);
+  let targetX = speed > 0.001 ? -(drag.motionVX / speed) * targetMagnitude : 0;
+  let targetY = speed > 0.001 ? -(drag.motionVY / speed) * targetMagnitude : 0;
+  let spring = bubbleDragSpring;
+  let damping = bubbleDragDamping;
+
+  if (hasSettledInput) {
+    targetX = 0;
+    targetY = 0;
+    spring *= bubbleDragReturnSpringMultiplier;
+    damping *= bubbleDragReturnDampingMultiplier;
+  }
+
+  const accelerationX = (targetX - bubble.dragJelloX) * spring - bubble.dragJelloVX * damping;
+  const accelerationY = (targetY - bubble.dragJelloY) * spring - bubble.dragJelloVY * damping;
+
+  bubble.dragJelloVX += accelerationX * deltaSeconds;
+  bubble.dragJelloVY += accelerationY * deltaSeconds;
+  bubble.dragJelloX += bubble.dragJelloVX * deltaSeconds;
+  bubble.dragJelloY += bubble.dragJelloVY * deltaSeconds;
+
+  applyBubbleDragJello(bubble);
+
+  const jelloMagnitude = Math.hypot(bubble.dragJelloX, bubble.dragJelloY);
+  const jelloVelocity = Math.hypot(bubble.dragJelloVX, bubble.dragJelloVY);
+
+  if (hasSettledInput && jelloMagnitude < 0.03 && jelloVelocity < 0.32) {
+    clearBubbleDragMotion(bubble);
+    return false;
+  }
+
+  const hasRecentInput = ageMs < 30;
+  const hasVelocity = speed > 0.01;
+  const hasSpringEnergy = jelloMagnitude > 0.03 || jelloVelocity > 0.32;
+
+  return hasRecentInput || hasVelocity || hasSpringEnergy;
+}
+
+function applyBubbleDragJello(bubble) {
+  const magnitude = Math.hypot(bubble.dragJelloX, bubble.dragJelloY);
+
+  if (magnitude < 0.001) {
+    resetBubbleDragJelloVars(bubble);
+    return;
+  }
+
+  const normalX = bubble.dragJelloX / magnitude;
+  const normalY = bubble.dragJelloY / magnitude;
+  const intensity = clamp(magnitude / bubbleDragMaxOffset, 0, 1);
+  const visualIntensity = Math.pow(intensity, 0.72);
+  const stretch = visualIntensity * 0.24;
+  const scaleX = 1 + (Math.abs(normalY) * stretch - Math.abs(normalX) * stretch * 0.78);
+  const scaleY = 1 + (Math.abs(normalX) * stretch - Math.abs(normalY) * stretch * 0.78);
+  const skewX = -normalY * visualIntensity * 10;
+  const skewY = normalX * visualIntensity * 10;
+  const rotate = normalX * visualIntensity * 3.4;
+
+  bubble.element.style.setProperty("--drag-jello-x", `${bubble.dragJelloX.toFixed(2)}px`);
+  bubble.element.style.setProperty("--drag-jello-y", `${bubble.dragJelloY.toFixed(2)}px`);
+  bubble.element.style.setProperty("--drag-jello-rotate", `${rotate.toFixed(2)}deg`);
+  bubble.element.style.setProperty("--drag-jello-scale-x", scaleX.toFixed(3));
+  bubble.element.style.setProperty("--drag-jello-scale-y", scaleY.toFixed(3));
+  bubble.element.style.setProperty("--drag-jello-skew-x", `${skewX.toFixed(2)}deg`);
+  bubble.element.style.setProperty("--drag-jello-skew-y", `${skewY.toFixed(2)}deg`);
+}
+
+function triggerBubbleResonance(bubble, options = {}) {
+  const offsetX = clamp(options.offsetX ?? 0, -bubbleResonanceMaxOffset, bubbleResonanceMaxOffset);
+  const offsetY = clamp(options.offsetY ?? -6, -bubbleResonanceMaxOffset, bubbleResonanceMaxOffset);
+  const tilt = clamp(options.tilt ?? offsetX * 0.3, -6, 6);
+
+  bubble.element.style.setProperty("--resonance-x", `${offsetX.toFixed(2)}px`);
+  bubble.element.style.setProperty("--resonance-y", `${offsetY.toFixed(2)}px`);
+  bubble.element.style.setProperty("--resonance-tilt", `${tilt.toFixed(2)}deg`);
+  bubble.element.classList.remove("is-resonating");
+  void bubble.element.offsetWidth;
+  bubble.element.classList.add("is-resonating");
+}
+
+function triggerLinkResonance(childBubble, parentBubble) {
+  const deltaX = childBubble.x - parentBubble.x;
+  const deltaY = childBubble.y - parentBubble.y;
+  const distance = Math.hypot(deltaX, deltaY) || 1;
+  const normalX = deltaX / distance;
+  const normalY = deltaY / distance;
+  const childAmplitude = clamp(distance * 0.05, 4, 8);
+  const parentAmplitude = clamp(childAmplitude * 0.55, 2.5, 5);
+
+  triggerBubbleResonance(childBubble, {
+    offsetX: normalX * childAmplitude,
+    offsetY: normalY * childAmplitude - 2,
+    tilt: normalX * 4.8,
+  });
+  triggerBubbleResonance(parentBubble, {
+    offsetX: -normalX * parentAmplitude,
+    offsetY: -normalY * parentAmplitude - 1,
+    tilt: -normalX * 3.2,
+  });
 }
 
 function keepBubbleInBounds(bubble) {
@@ -764,270 +924,19 @@ function requestAnimationLoop() {
 }
 
 function stepScene(frameTime) {
-  const delta = Math.min((frameTime - state.lastFrame) / 16.667, 2.2);
-  state.lastFrame = frameTime;
   state.rafId = 0;
-
-  applyBubbleMotion(frameTime, delta);
-  applyDraggedChainFollow(delta);
-  applyChainLayout(delta);
-  resolveLinkCrossings(delta);
-  solveCollisions();
+  const previousFrameTime = state.lastSceneTime || frameTime;
+  const deltaSeconds = Math.min((frameTime - previousFrameTime) / 1000, 0.05);
+  state.lastSceneTime = frameTime;
+  const keepAnimating = updateBubbleDragPhysics(deltaSeconds, frameTime);
   redrawLinks();
 
-  if (sceneStillMoving()) {
+  if (keepAnimating) {
     requestAnimationLoop();
-  }
-}
-
-function applyBubbleMotion(frameTime, delta) {
-  const draggedBubbleId = state.drag?.bubble.id ?? null;
-
-  for (const bubble of state.bubbles) {
-    if (bubble.id === draggedBubbleId || bubble.isEditing) {
-      continue;
-    }
-
-    bubble.vx *= 0.9;
-    bubble.vy *= 0.94;
-    bubble.x += bubble.vx * delta;
-    bubble.y += bubble.vy * delta;
-
-    keepBubbleInBounds(bubble);
-    renderBubble(bubble);
-  }
-}
-
-function applyDraggedChainFollow(delta) {
-  if (!state.drag) {
     return;
   }
 
-  const drag = state.drag;
-  const rootBubble = drag.bubble;
-  const rootPullX = drag.targetX - rootBubble.x;
-  const rootPullY = drag.targetY - rootBubble.y;
-
-  rootBubble.vx += rootPullX * 0.18 * delta;
-  rootBubble.vy += rootPullY * 0.18 * delta;
-  rootBubble.x += rootBubble.vx * delta;
-  rootBubble.y += rootBubble.vy * delta;
-  rootBubble.vx *= 0.72;
-  rootBubble.vy *= 0.72;
-  keepBubbleInBounds(rootBubble);
-  renderBubble(rootBubble);
-
-  for (const link of state.links) {
-    if (!drag.componentIds.has(link.a) || !drag.componentIds.has(link.b)) {
-      continue;
-    }
-
-    const firstBubble = getBubbleById(link.a);
-    const secondBubble = getBubbleById(link.b);
-
-    if (!firstBubble || !secondBubble) {
-      continue;
-    }
-
-    const targetDistance =
-      drag.linkLengths.get(link.id) ?? firstBubble.radius + secondBubble.radius + 28;
-    const dx = secondBubble.x - firstBubble.x;
-    const dy = secondBubble.y - firstBubble.y;
-    const distance = Math.hypot(dx, dy) || 0.0001;
-    const stretch = distance - targetDistance;
-    const normalX = dx / distance;
-    const normalY = dy / distance;
-    const springForce = stretch * 0.018 * delta;
-
-    if (firstBubble.id !== rootBubble.id) {
-      firstBubble.vx += normalX * springForce;
-      firstBubble.vy += normalY * springForce;
-    }
-
-    if (secondBubble.id !== rootBubble.id) {
-      secondBubble.vx -= normalX * springForce;
-      secondBubble.vy -= normalY * springForce;
-    }
-  }
-
-  for (const bubble of state.bubbles) {
-    if (!drag.componentIds.has(bubble.id) || bubble.id === rootBubble.id) {
-      continue;
-    }
-
-    bubble.vx *= 0.86;
-    bubble.vy *= 0.86;
-    bubble.x += bubble.vx * delta;
-    bubble.y += bubble.vy * delta;
-    keepBubbleInBounds(bubble);
-    renderBubble(bubble);
-  }
-}
-
-function applyChainLayout(delta) {
-  const draggedIds = state.drag?.componentIds ?? new Set();
-  const parentChildrenMap = new Map();
-
-  for (const link of state.links) {
-    const parentBubble = getBubbleById(link.parentId);
-    const childBubble = getBubbleById(link.childId);
-
-    if (!parentBubble || !childBubble) {
-      continue;
-    }
-
-    if (!parentChildrenMap.has(parentBubble.id)) {
-      parentChildrenMap.set(parentBubble.id, []);
-    }
-
-    parentChildrenMap.get(parentBubble.id).push(childBubble);
-  }
-
-  for (const [parentId, children] of parentChildrenMap.entries()) {
-    const parentBubble = getBubbleById(parentId);
-
-    if (!parentBubble) {
-      continue;
-    }
-
-    const sortedChildren = children.slice().sort((firstBubble, secondBubble) => {
-      return Math.abs(firstBubble.x - parentBubble.x) - Math.abs(secondBubble.x - parentBubble.x);
-    });
-    const centerIndex = (sortedChildren.length - 1) / 2;
-
-    sortedChildren.forEach((childBubble, index) => {
-      if (draggedIds.has(parentBubble.id) || draggedIds.has(childBubble.id)) {
-        return;
-      }
-
-      const slot = index - centerIndex;
-      const row = Math.floor(index / 5);
-      const targetX = parentBubble.x + slot * 10;
-      const targetY =
-        parentBubble.y +
-        parentBubble.radius +
-        childBubble.radius +
-        28 +
-        row * (childBubble.radius * 0.65);
-      const offsetX = targetX - childBubble.x;
-      const offsetY = targetY - childBubble.y;
-
-      childBubble.vx += offsetX * 0.008 * delta;
-      childBubble.vy += offsetY * 0.011 * delta;
-      parentBubble.vx -= offsetX * 0.0008 * delta;
-    });
-  }
-}
-
-function resolveLinkCrossings(delta) {
-  if (state.links.length < 2) {
-    return;
-  }
-
-  const draggedIds = state.drag?.componentIds ?? new Set();
-
-  for (let index = 0; index < state.links.length; index += 1) {
-    const firstLink = state.links[index];
-
-    for (let nextIndex = index + 1; nextIndex < state.links.length; nextIndex += 1) {
-      const secondLink = state.links[nextIndex];
-
-      if (linksShareEndpoint(firstLink, secondLink)) {
-        continue;
-      }
-
-      const firstStart = getBubbleById(firstLink.a);
-      const firstEnd = getBubbleById(firstLink.b);
-      const secondStart = getBubbleById(secondLink.a);
-      const secondEnd = getBubbleById(secondLink.b);
-
-      if (!firstStart || !firstEnd || !secondStart || !secondEnd) {
-        continue;
-      }
-
-      if (
-        !segmentsIntersect(firstStart.x, firstStart.y, firstEnd.x, firstEnd.y, secondStart.x, secondStart.y, secondEnd.x, secondEnd.y)
-      ) {
-        continue;
-      }
-
-      applyCrossingSeparation(firstLink, secondLink, draggedIds, delta);
-    }
-  }
-}
-
-function applyCrossingSeparation(firstLink, secondLink, draggedIds, delta) {
-  const firstParent = getBubbleById(firstLink.parentId);
-  const firstChild = getBubbleById(firstLink.childId);
-  const secondParent = getBubbleById(secondLink.parentId);
-  const secondChild = getBubbleById(secondLink.childId);
-
-  if (!firstParent || !firstChild || !secondParent || !secondChild) {
-    return;
-  }
-
-  const push = 0.9 * delta;
-  const firstShouldGoLeft = firstChild.x <= secondChild.x;
-  const horizontalDirection = firstShouldGoLeft ? -1 : 1;
-
-  nudgeBubble(firstChild, horizontalDirection * push, push * 0.38, draggedIds);
-  nudgeBubble(secondChild, -horizontalDirection * push, push * 0.38, draggedIds);
-  nudgeBubble(firstParent, -horizontalDirection * push * 0.24, 0, draggedIds);
-  nudgeBubble(secondParent, horizontalDirection * push * 0.24, 0, draggedIds);
-}
-
-function solveCollisions() {
-  const draggedComponentIds = state.drag?.componentIds ?? new Set();
-
-  for (let index = 0; index < state.bubbles.length; index += 1) {
-    const firstBubble = state.bubbles[index];
-
-    for (let nextIndex = index + 1; nextIndex < state.bubbles.length; nextIndex += 1) {
-      const secondBubble = state.bubbles[nextIndex];
-
-      // While a chain is being dragged, let that connected group overlap others so links can be made.
-      if (draggedComponentIds.has(firstBubble.id) || draggedComponentIds.has(secondBubble.id)) {
-        continue;
-      }
-
-      const dx = secondBubble.x - firstBubble.x;
-      const dy = secondBubble.y - firstBubble.y;
-      const distance = Math.hypot(dx, dy) || 0.0001;
-      const minimumGap = firstBubble.radius + secondBubble.radius + 18;
-
-      if (distance >= minimumGap) {
-        continue;
-      }
-
-      const overlap = minimumGap - distance;
-      const normalX = dx / distance;
-      const normalY = dy / distance;
-
-      firstBubble.x -= normalX * overlap * 0.5;
-      firstBubble.y -= normalY * overlap * 0.5;
-      secondBubble.x += normalX * overlap * 0.5;
-      secondBubble.y += normalY * overlap * 0.5;
-
-      firstBubble.vx -= normalX * overlap * 0.015;
-      firstBubble.vy -= normalY * overlap * 0.015;
-      secondBubble.vx += normalX * overlap * 0.015;
-      secondBubble.vy += normalY * overlap * 0.015;
-
-      keepBubbleInBounds(firstBubble);
-      keepBubbleInBounds(secondBubble);
-      renderBubble(firstBubble);
-      renderBubble(secondBubble);
-    }
-  }
-}
-
-function untangleLinks(iterations) {
-  for (let index = 0; index < iterations; index += 1) {
-    resolveLinkCrossings(1.6);
-    solveCollisions();
-  }
-
-  redrawLinks();
+  state.lastSceneTime = 0;
 }
 
 function getBubbleById(bubbleId) {
@@ -1036,40 +945,6 @@ function getBubbleById(bubbleId) {
 
 function getBubblesByIds(bubbleIds) {
   return state.bubbles.filter((bubble) => bubbleIds.has(bubble.id));
-}
-
-function captureComponentLinkLengths(componentIds) {
-  const linkLengths = new Map();
-
-  for (const link of state.links) {
-    if (!componentIds.has(link.a) || !componentIds.has(link.b)) {
-      continue;
-    }
-
-    const firstBubble = getBubbleById(link.a);
-    const secondBubble = getBubbleById(link.b);
-
-    if (!firstBubble || !secondBubble) {
-      continue;
-    }
-
-    linkLengths.set(link.id, Math.hypot(secondBubble.x - firstBubble.x, secondBubble.y - firstBubble.y));
-  }
-
-  return linkLengths;
-}
-
-function createLinkedChildBubble(parentBubble) {
-  const angle = Math.random() * Math.PI * 2;
-  const distance = parentBubble.radius + 108;
-  const childBubble = createBubble({
-    x: parentBubble.x + Math.cos(angle) * distance,
-    y: parentBubble.y + Math.sin(angle) * distance,
-  });
-
-  keepBubbleInBounds(childBubble);
-  renderBubble(childBubble);
-  createLink(childBubble, parentBubble);
 }
 
 function refreshBubbleSizes() {
@@ -1215,7 +1090,7 @@ function enterApp() {
 
 function setZoom(nextZoom, options = {}) {
   if (options.revealViewport) {
-    revealZoomViewport();
+    revealMinimapViewportPreview();
   }
 
   const clampedZoom = clamp(nextZoom, minZoom, maxZoom);
@@ -1448,6 +1323,7 @@ function startManualPan(direction, button) {
   stopManualPan();
   state.panIntent = direction;
   button.classList.add("is-active");
+  revealMinimapViewportPreview();
   state.panLastFrame = performance.now();
   if (!state.panRafId) {
     state.panRafId = window.requestAnimationFrame(stepManualPan);
@@ -1485,32 +1361,36 @@ function stepManualPan(frameTime) {
     state.panX -= distance;
   }
 
-  applyZoom();
+  applyZoom({ revealViewport: true });
   state.panRafId = window.requestAnimationFrame(stepManualPan);
 }
 
-function applyZoom() {
+function applyZoom(options = {}) {
   stageViewport.style.transform = `translate(${state.panX}px, ${state.panY}px) scale(${state.zoom})`;
   updateMinimap();
+
+  if (options.revealViewport) {
+    revealMinimapViewportPreview();
+  }
 }
 
-function revealZoomViewport() {
+function revealMinimapViewportPreview() {
   minimapViewport.classList.add("is-visible");
 
-  if (state.zoomViewportTimerId) {
-    window.clearTimeout(state.zoomViewportTimerId);
+  if (state.viewportPreviewTimerId) {
+    window.clearTimeout(state.viewportPreviewTimerId);
   }
 
-  state.zoomViewportTimerId = window.setTimeout(() => {
-    state.zoomViewportTimerId = 0;
-    hideZoomViewport();
+  state.viewportPreviewTimerId = window.setTimeout(() => {
+    state.viewportPreviewTimerId = 0;
+    hideMinimapViewportPreview();
   }, 500);
 }
 
-function hideZoomViewport() {
-  if (state.zoomViewportTimerId) {
-    window.clearTimeout(state.zoomViewportTimerId);
-    state.zoomViewportTimerId = 0;
+function hideMinimapViewportPreview() {
+  if (state.viewportPreviewTimerId) {
+    window.clearTimeout(state.viewportPreviewTimerId);
+    state.viewportPreviewTimerId = 0;
   }
   if (state.minimapDrag) {
     return;
@@ -1674,48 +1554,6 @@ function getConnectedBubbleIds(startBubbleId) {
   return visitedBubbleIds;
 }
 
-function linksShareEndpoint(firstLink, secondLink) {
-  return (
-    firstLink.a === secondLink.a ||
-    firstLink.a === secondLink.b ||
-    firstLink.b === secondLink.a ||
-    firstLink.b === secondLink.b
-  );
-}
-
-function segmentsIntersect(ax, ay, bx, by, cx, cy, dx, dy) {
-  const firstOrientation = orientation(ax, ay, bx, by, cx, cy);
-  const secondOrientation = orientation(ax, ay, bx, by, dx, dy);
-  const thirdOrientation = orientation(cx, cy, dx, dy, ax, ay);
-  const fourthOrientation = orientation(cx, cy, dx, dy, bx, by);
-
-  return firstOrientation * secondOrientation < 0 && thirdOrientation * fourthOrientation < 0;
-}
-
-function orientation(ax, ay, bx, by, cx, cy) {
-  return (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
-}
-
-function nudgeBubble(bubble, velocityX, velocityY, draggedIds) {
-  if (draggedIds.has(bubble.id) || bubble.isEditing) {
-    return;
-  }
-
-  bubble.vx += velocityX;
-  bubble.vy += velocityY;
-}
-
-function sceneStillMoving() {
-  if (state.drag) {
-    return true;
-  }
-
-  return state.bubbles.some((bubble) => {
-    const speed = Math.abs(bubble.vx) + Math.abs(bubble.vy);
-    return speed > 0.04;
-  });
-}
-
 function updateMinimap() {
   if (!minimapFrame) {
     return;
@@ -1820,7 +1658,7 @@ function navigateFromMinimap(clientX, clientY) {
 }
 
 function beginMinimapViewportDrag(event) {
-  revealZoomViewport();
+  revealMinimapViewportPreview();
   const rect = minimapFrame.getBoundingClientRect();
   const pointerX = clamp(((event.clientX - rect.left) / rect.width) * 100, 0, 100);
   const pointerY = clamp(((event.clientY - rect.top) / rect.height) * 100, 0, 100);
@@ -1871,7 +1709,7 @@ function endMinimapViewportDrag(event) {
   minimapViewport.removeEventListener("pointerup", endMinimapViewportDrag);
   minimapViewport.removeEventListener("pointercancel", endMinimapViewportDrag);
   state.minimapDrag = null;
-  hideZoomViewport();
+  hideMinimapViewportPreview();
 }
 
 function setViewportTopLeft(worldMinX, worldMinY) {
