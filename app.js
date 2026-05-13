@@ -72,6 +72,11 @@ const bubbleDragReturnSpringMultiplier = 1.32;
 const bubbleDragReturnDampingMultiplier = 1.18;
 const bubbleDragStillnessMs = 24;
 const bubbleDragMaxOffset = 15;
+const bubbleLinkRepelGap = 12;
+const bubbleLinkRepelSpring = 150;
+const bubbleLinkRepelDamping = 19;
+const bubbleLinkRepelMinImpulse = 220;
+const bubbleLinkRepelMaxImpulse = 680;
 const keyBoundButtons = {
   triangle: triangleButton,
   circle: circleButton,
@@ -356,6 +361,10 @@ function createBubble(options = {}) {
     dragJelloY: 0,
     dragJelloVX: 0,
     dragJelloVY: 0,
+    linkSettleTargetX: null,
+    linkSettleTargetY: null,
+    linkSettleVX: 0,
+    linkSettleVY: 0,
     isEditing: false,
   };
 
@@ -474,6 +483,7 @@ function beginBubbleInteraction(event, bubble) {
 function beginDrag(interaction, event) {
   const bubble = interaction.bubble;
   clearBubbleResonance(bubble);
+  clearBubbleLinkSettle(bubble);
   clearBubbleDragMotion(bubble);
   bubble.element.classList.add("is-dragging");
   const componentIds = getConnectedBubbleIds(bubble.id);
@@ -505,11 +515,15 @@ function endDrag() {
   }
 
   const { bubble, target } = state.drag;
+  const sourceMotion = {
+    vx: state.drag.motionVX,
+    vy: state.drag.motionVY,
+  };
   clearBubbleDragMotion(bubble);
   bubble.element.classList.remove("is-dragging");
 
   if (target) {
-    createLink(state.drag.bubble, target);
+    createLink(state.drag.bubble, target, sourceMotion);
   }
 
   clearPreviewTarget();
@@ -544,7 +558,7 @@ function dragBubble(event) {
   requestAnimationLoop();
 }
 
-function createLink(childBubble, parentBubble) {
+function createLink(childBubble, parentBubble, sourceMotion = null) {
   if (childBubble.id === parentBubble.id || bubblesAreLinked(childBubble.id, parentBubble.id)) {
     return;
   }
@@ -567,7 +581,7 @@ function createLink(childBubble, parentBubble) {
   parentBubble.connections.add(childBubble.id);
   parentBubble.children.add(childBubble.id);
   refreshBubbleSizes();
-  triggerLinkResonance(childBubble, parentBubble);
+  triggerLinkResonance(childBubble, parentBubble, sourceMotion);
 
   redrawLinks();
 }
@@ -659,6 +673,24 @@ function clearBubbleDragMotion(bubble) {
   bubble.dragJelloVX = 0;
   bubble.dragJelloVY = 0;
   resetBubbleDragJelloVars(bubble);
+}
+
+function clearBubbleLinkSettle(bubble, snapToTarget = false) {
+  if (
+    snapToTarget &&
+    bubble.linkSettleTargetX != null &&
+    bubble.linkSettleTargetY != null
+  ) {
+    bubble.x = bubble.linkSettleTargetX;
+    bubble.y = bubble.linkSettleTargetY;
+    keepBubbleInBounds(bubble);
+    renderBubble(bubble);
+  }
+
+  bubble.linkSettleTargetX = null;
+  bubble.linkSettleTargetY = null;
+  bubble.linkSettleVX = 0;
+  bubble.linkSettleVY = 0;
 }
 
 function resetBubbleDragJelloVars(bubble) {
@@ -772,14 +804,57 @@ function triggerBubbleResonance(bubble, options = {}) {
   bubble.element.classList.add("is-resonating");
 }
 
-function triggerLinkResonance(childBubble, parentBubble) {
+function triggerLinkResonance(childBubble, parentBubble, sourceMotion = null) {
   const deltaX = childBubble.x - parentBubble.x;
   const deltaY = childBubble.y - parentBubble.y;
-  const distance = Math.hypot(deltaX, deltaY) || 1;
-  const normalX = deltaX / distance;
-  const normalY = deltaY / distance;
-  const childAmplitude = clamp(distance * 0.05, 4, 8);
-  const parentAmplitude = clamp(childAmplitude * 0.55, 2.5, 5);
+  const distance = Math.hypot(deltaX, deltaY);
+  const fallbackSpeed = sourceMotion ? Math.hypot(sourceMotion.vx, sourceMotion.vy) : 0;
+  const normalX =
+    distance > 0.001
+      ? deltaX / distance
+      : fallbackSpeed > 0.001
+        ? sourceMotion.vx / fallbackSpeed
+        : 1;
+  const normalY =
+    distance > 0.001
+      ? deltaY / distance
+      : fallbackSpeed > 0.001
+        ? sourceMotion.vy / fallbackSpeed
+        : 0;
+  const desiredDistance = childBubble.radius + parentBubble.radius + bubbleLinkRepelGap;
+  const repelDistance = Math.max(desiredDistance - distance, 0);
+  const childShare = clamp(
+    parentBubble.radius / (childBubble.radius + parentBubble.radius || 1),
+    0.76,
+    0.9
+  );
+  const parentShare = 1 - childShare;
+  const childTargetX = childBubble.x + normalX * repelDistance * childShare;
+  const childTargetY = childBubble.y + normalY * repelDistance * childShare;
+  const parentTargetX = parentBubble.x - normalX * repelDistance * parentShare;
+  const parentTargetY = parentBubble.y - normalY * repelDistance * parentShare;
+
+  clearBubbleLinkSettle(childBubble);
+  clearBubbleLinkSettle(parentBubble);
+
+  if (repelDistance <= 0.01) {
+    return;
+  }
+
+  const childBounds = getBubbleBounds(childBubble);
+  const parentBounds = getBubbleBounds(parentBubble);
+  const impulse = clamp(repelDistance * 10.5, bubbleLinkRepelMinImpulse, bubbleLinkRepelMaxImpulse);
+  const childAmplitude = clamp(repelDistance * 0.12, 4, 8.5);
+  const parentAmplitude = clamp(childAmplitude * 0.6, 2.5, 5.5);
+
+  childBubble.linkSettleTargetX = clamp(childTargetX, childBounds.minX, childBounds.maxX);
+  childBubble.linkSettleTargetY = clamp(childTargetY, childBounds.minY, childBounds.maxY);
+  parentBubble.linkSettleTargetX = clamp(parentTargetX, parentBounds.minX, parentBounds.maxX);
+  parentBubble.linkSettleTargetY = clamp(parentTargetY, parentBounds.minY, parentBounds.maxY);
+  childBubble.linkSettleVX += normalX * impulse * childShare;
+  childBubble.linkSettleVY += normalY * impulse * childShare;
+  parentBubble.linkSettleVX -= normalX * impulse * parentShare;
+  parentBubble.linkSettleVY -= normalY * impulse * parentShare;
 
   triggerBubbleResonance(childBubble, {
     offsetX: normalX * childAmplitude,
@@ -791,6 +866,46 @@ function triggerLinkResonance(childBubble, parentBubble) {
     offsetY: -normalY * parentAmplitude - 1,
     tilt: -normalX * 3.2,
   });
+  requestAnimationLoop();
+}
+
+function updateBubbleLinkSettlePhysics(deltaSeconds) {
+  let keepAnimating = false;
+
+  for (const bubble of state.bubbles) {
+    if (bubble.linkSettleTargetX == null || bubble.linkSettleTargetY == null) {
+      continue;
+    }
+
+    const accelerationX =
+      (bubble.linkSettleTargetX - bubble.x) * bubbleLinkRepelSpring -
+      bubble.linkSettleVX * bubbleLinkRepelDamping;
+    const accelerationY =
+      (bubble.linkSettleTargetY - bubble.y) * bubbleLinkRepelSpring -
+      bubble.linkSettleVY * bubbleLinkRepelDamping;
+
+    bubble.linkSettleVX += accelerationX * deltaSeconds;
+    bubble.linkSettleVY += accelerationY * deltaSeconds;
+    bubble.x += bubble.linkSettleVX * deltaSeconds;
+    bubble.y += bubble.linkSettleVY * deltaSeconds;
+    keepBubbleInBounds(bubble);
+    renderBubble(bubble);
+
+    const remainingDistance = Math.hypot(
+      bubble.linkSettleTargetX - bubble.x,
+      bubble.linkSettleTargetY - bubble.y
+    );
+    const remainingSpeed = Math.hypot(bubble.linkSettleVX, bubble.linkSettleVY);
+
+    if (remainingDistance < 0.45 && remainingSpeed < 14) {
+      clearBubbleLinkSettle(bubble, true);
+      continue;
+    }
+
+    keepAnimating = true;
+  }
+
+  return keepAnimating;
 }
 
 function keepBubbleInBounds(bubble) {
@@ -928,7 +1043,9 @@ function stepScene(frameTime) {
   const previousFrameTime = state.lastSceneTime || frameTime;
   const deltaSeconds = Math.min((frameTime - previousFrameTime) / 1000, 0.05);
   state.lastSceneTime = frameTime;
-  const keepAnimating = updateBubbleDragPhysics(deltaSeconds, frameTime);
+  const keepDragAnimating = updateBubbleDragPhysics(deltaSeconds, frameTime);
+  const keepLinkAnimating = updateBubbleLinkSettlePhysics(deltaSeconds);
+  const keepAnimating = keepDragAnimating || keepLinkAnimating;
   redrawLinks();
 
   if (keepAnimating) {
